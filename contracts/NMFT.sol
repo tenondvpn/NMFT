@@ -159,13 +159,13 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 压缩向量
-    function compressVector(bytes32[] memory vector) public view returns (uint256) {
+    function compressVector(int8[] memory vector) public view returns (uint256) {
         require(vector.length <= MAX_VECTOR_LENGTH, "Vector too long");
         uint256 compressed = 0;
         for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
             int256 dot = 0;
             for (uint j = 0; j < vector.length; j++) {
-                dot += int256(uint256(vector[j])) * int256(projectionMatrix[i][j]);
+                dot += int256(vector[j]) * int256(projectionMatrix[i][j]);
             }
             if (dot > 0) {
                 compressed |= (1 << i);
@@ -398,7 +398,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     function ownerResToChallenge(
         uint256 tokenId,
         address buyer,
-        bytes32[][] memory vectors,
+        int8[][] memory vectors,
         bytes32[][] memory merkleProofs,
         bytes32[] memory merkleRoots
     ) 
@@ -440,7 +440,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         uint256 tokenId,
         address buyer,
         uint256 challengerTokenId,
-        bytes32[][] memory challengerVectors,
+        int8[][] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
     ) 
@@ -482,7 +482,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         Challenge storage challenge,
         uint256 tokenId,
         uint256 challengerTokenId,
-        bytes32[][] memory challengerVectors,
+        int8[][] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
     ) private view returns (uint256) {
@@ -511,7 +511,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 验证Merkle根
     function _validateMerkleProof(
         uint256 tokenId,
-        bytes32[] memory vector,
+        int8[] memory vector,
         bytes32[] memory merkleProof,
         bytes32 merkleRoot
     ) private view {
