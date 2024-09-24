@@ -258,7 +258,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         uint256 reqBatchNumber, 
         TradeType tradeType, 
         uint256 challengeSize, 
-        uint256 nftTransferFee
+        uint256 nftTransferFee,
+        uint256 ownerDepositAmount
     ) 
         external 
         tokenExists(tokenId) 
@@ -280,7 +281,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             tradeType: tradeType,
             challengeSize: challengeSize,
             nftTransferFee: nftTransferFee,
-            ownerDepositAmount: 0,
+            ownerDepositAmount: ownerDepositAmount,
             confirmed: false,
             buyerDeposited: false,
             ownerDeposited: false,
