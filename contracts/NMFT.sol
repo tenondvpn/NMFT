@@ -30,10 +30,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     Counters.Counter private _tokenIds;
     address public admin;
     uint256 public similarityThreshold = 95;
+    bool public isMatrixInitialized = false;
     uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
     uint256 public constant TRANSACTION_TIMEOUT = 1 days;
     uint256 public constant COMPRESSED_VECTOR_LENGTH = 256;
-    uint256 public constant MAX_VECTOR_LENGTH = 1000;
+    uint256 public constant MAX_VECTOR_LENGTH = 100;
 
     // 数据信息结构体
     struct DataInfo {
@@ -90,14 +91,14 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => HashchainInfo)) private _hashchainInfo;
 
     // 公开的随机投影矩阵
-    int8[MAX_VECTOR_LENGTH][COMPRESSED_VECTOR_LENGTH] public projectionMatrix;
+    int8[COMPRESSED_VECTOR_LENGTH][MAX_VECTOR_LENGTH] public projectionMatrix;
 
     // 事件：铸造NFT
     event DataNFTMinted(uint256 indexed tokenId, string description, uint256 batchPrice);
     // 事件：请求价格和批次数等
     event RequestMade(
         uint256 indexed tokenId,
-        address indexed requester,
+        address indexed buyer,
         uint256 reqBatchPrice,
         uint256 reqBatchNumber,
         TradeType tradeType,
@@ -108,9 +109,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 事件：记录阈值的更新
     event SimilarityThresholdUpdated(uint256 newThreshold);
     // 事件：确认请求
-    event RequestConfirmed(uint256 indexed tokenId, address indexed requester, address indexed confirmer);
+    event RequestConfirmed(uint256 indexed tokenId, address indexed buyer, address indexed confirmer);
     // 事件：购买者质押完成
-    event BuyerDepositMade(uint256 indexed tokenId, address indexed requester, uint256 amount);
+    event BuyerDepositMade(uint256 indexed tokenId, address indexed buyer, uint256 amount);
     // 事件：拥有者质押完成
     event OwnerDepositMade(uint256 indexed tokenId, address indexed owner, uint256 amount);
     // 事件：挑战开始
@@ -132,9 +133,22 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 事件：交易已清理
     event TransactionCleanedUp(uint256 indexed tokenId, address indexed buyer, address indexed cleaner);
 
-    constructor(address initialOwner, uint256 _projectionSeed) ERC721("Copyrighted Data", "CPRD") Ownable() {
+    constructor(address initialOwner) ERC721("Copyrighted Data", "CPRD") Ownable() {
         admin = initialOwner;
-        initializeProjectionMatrix(_projectionSeed);
+    }
+
+    function setProjectionMatrix(int8[][] memory matrix) external onlyOwner {
+        require(!isMatrixInitialized, "Matrix already initialized");
+        require(matrix.length == COMPRESSED_VECTOR_LENGTH, "Invalid column length");
+        
+        for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
+            require(matrix[i].length == MAX_VECTOR_LENGTH, "Invalid row length");
+            for (uint j = 0; j < MAX_VECTOR_LENGTH; j++) {
+                projectionMatrix[i][j] = matrix[i][j];
+            }
+        }
+        
+        isMatrixInitialized = true;
     }
 
     // 更新相似度阈值的函数
@@ -142,15 +156,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(newThreshold > 0 && newThreshold <= 100, "Invalid threshold value");
         similarityThreshold = newThreshold;
         emit SimilarityThresholdUpdated(newThreshold);
-    }
-
-    // 初始化随机投影矩阵
-    function initializeProjectionMatrix(uint256 seed) private {
-        for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
-            for (uint j = 0; j < MAX_VECTOR_LENGTH; j++) {
-                projectionMatrix[i][j] = pseudoRandom(seed, i, j) > 0 ? int8(1) : int8(-1);
-            }
-        }
     }
 
     // 压缩向量
@@ -188,11 +193,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             n >>= 1;
         }
         return count;
-    }
-
-    // 生成伪随机数
-    function pseudoRandom(uint256 seed, uint256 i, uint256 j) public pure returns (int256) {
-        return int256(uint256(keccak256(abi.encodePacked(seed, i, j))));
     }
 
     // 铸造数据NFT
@@ -306,16 +306,16 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 所有者确认请求
-    function confirmRequest(uint256 tokenId, address requester) 
+    function confirmRequest(uint256 tokenId, address buyer) 
         external 
         tokenExists(tokenId) 
         onlyTokenOwner(tokenId) 
-        validRequest(tokenId, requester) 
-        requestNotConfirmed(tokenId, requester)
+        validRequest(tokenId, buyer) 
+        requestNotConfirmed(tokenId, buyer)
     {
-        _requests[tokenId][requester].confirmed = true;
-        _requests[tokenId][requester].lastActivityTimestamp = block.timestamp;
-        emit RequestConfirmed(tokenId, requester, msg.sender);
+        _requests[tokenId][buyer].confirmed = true;
+        _requests[tokenId][buyer].lastActivityTimestamp = block.timestamp;
+        emit RequestConfirmed(tokenId, buyer, msg.sender);
     }
 
     // 买家质押
@@ -409,7 +409,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         Challenge storage challenge = _challenges[tokenId][buyer];
         Request storage request = _requests[tokenId][buyer];
         uint256 challengeSize = request.challengeSize;
-        DataInfo storage dataInfo = _dataInfo[tokenId];
         
         require(
             vectors.length == challengeSize && 
@@ -420,17 +419,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
 
         challenge.compressedChallengeVectors = new uint256[](challengeSize);
         challenge.challengeMerkleRoots = new bytes32[](challengeSize);
-
         for (uint i = 0; i < vectors.length; i++) {
-            // 验证Merkle根是否存在
-            require(dataInfo.merkleRootTimestamps[merkleRoots[i]] != 0, "Invalid Merkle root");
-            // 验证Merkle证明
-            bytes32 vectorHash = keccak256(abi.encodePacked(vectors[i]));
-            require(
-                MerkleProof.verify(merkleProofs[i], merkleRoots[i], vectorHash),
-                "Invalid Merkle proof"
-            );
-
+            _validateMerkleProof(tokenId, vectors[i], merkleProofs[i], merkleRoots[i]);
             // 压缩向量
             challenge.compressedChallengeVectors[i] = compressVector(vectors[i]);
             challenge.challengeMerkleRoots[i] = merkleRoots[i];
@@ -467,7 +457,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         }
 
         uint256[] memory originalCompVectors = challenge.compressedChallengeVectors;
-        bytes32[] memory originalMerkleRoots = challenge.challengeMerkleRoots;
         require(
             originalCompVectors.length == challengerVectors.length && 
             originalCompVectors.length == challengerMerkleProofs.length &&
@@ -475,29 +464,39 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             "Input lengths mismatch"
         );
 
-        DataInfo storage originalDataInfo = _dataInfo[tokenId];
-        DataInfo storage challengerDataInfo = _dataInfo[challengerTokenId];
+        uint256 totalTimestampDifference = _processChallengerVectors(challenge, tokenId, challengerTokenId, challengerVectors, challengerMerkleProofs, challengerMerkleRoots);
 
+        if (totalTimestampDifference > challenge.totalTimestampDifference) {
+            challenge.currentWinner = msg.sender;
+            challenge.winnerTokenId = challengerTokenId;
+            challenge.totalTimestampDifference = totalTimestampDifference;
+        }
+
+        _requests[tokenId][buyer].lastActivityTimestamp = block.timestamp;
+        emit ChallengeResponseReceived(tokenId, msg.sender, challengerTokenId);
+    }
+
+    // 处理挑战者向量
+    function _processChallengerVectors(
+        Challenge storage challenge,
+        uint256 tokenId,
+        uint256 challengerTokenId,
+        bytes32[][] memory challengerVectors,
+        bytes32[][] memory challengerMerkleProofs,
+        bytes32[] memory challengerMerkleRoots
+    ) private view returns (uint256) {
         uint256 totalTimestampDifference = 0;
+        uint256[] memory originalCompVectors = challenge.compressedChallengeVectors;
+        bytes32[] memory originalMerkleRoots = challenge.challengeMerkleRoots;
 
         for (uint i = 0; i < challengerVectors.length; i++) {
-            // 验证Merkle根是否存在
-            require(challengerDataInfo.merkleRootTimestamps[challengerMerkleRoots[i]] != 0, "Invalid Merkle root");
-            // 验证Merkle证明
-            bytes32 claimedVectorHash = keccak256(abi.encodePacked(challengerVectors[i]));
-            require(
-                MerkleProof.verify(challengerMerkleProofs[i], challengerMerkleRoots[i], claimedVectorHash),
-                "Invalid Merkle proof"
-            );
-
-            // 检查Merkle根的时间戳
-            uint256 challengerTimestamp = challengerDataInfo.merkleRootTimestamps[challengerMerkleRoots[i]];
-            uint256 originalTimestamp = originalDataInfo.merkleRootTimestamps[originalMerkleRoots[i]];
+            _validateMerkleProof(challengerTokenId, challengerVectors[i], challengerMerkleProofs[i], challengerMerkleRoots[i]);
+            uint256 challengerTimestamp = _dataInfo[challengerTokenId].merkleRootTimestamps[challengerMerkleRoots[i]];
+            uint256 originalTimestamp = _dataInfo[tokenId].merkleRootTimestamps[originalMerkleRoots[i]];
             require(challengerTimestamp < originalTimestamp, "Challenger Merkle root not earlier");
 
             totalTimestampDifference += originalTimestamp - challengerTimestamp;
 
-            // 计算相似度
             uint256 challengerCompVectors = compressVector(challengerVectors[i]);
             uint256 distance = hammingDistance(originalCompVectors[i], challengerCompVectors);
             uint256 similarity = (COMPRESSED_VECTOR_LENGTH - distance) * 100 / COMPRESSED_VECTOR_LENGTH;
@@ -505,13 +504,22 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             require(similarity >= similarityThreshold, "Similarity below threshold");
         }
 
-        if (totalTimestampDifference > challenge.totalTimestampDifference) {
-            challenge.currentWinner = msg.sender;
-            challenge.totalTimestampDifference = totalTimestampDifference;
-        }
+        return totalTimestampDifference;
+    }
 
-        _requests[tokenId][buyer].lastActivityTimestamp = block.timestamp;
-        emit ChallengeResponseReceived(tokenId, msg.sender, challengerTokenId);
+    // 验证Merkle根
+    function _validateMerkleProof(
+        uint256 tokenId,
+        bytes32[] memory vector,
+        bytes32[] memory merkleProof,
+        bytes32 merkleRoot
+    ) private view {
+        require(_dataInfo[tokenId].merkleRootTimestamps[merkleRoot] != 0, "Invalid Merkle root");
+        bytes32 vectorHash = keccak256(abi.encodePacked(vector));
+        require(
+            MerkleProof.verify(merkleProof, merkleRoot, vectorHash),
+            "Invalid Merkle proof"
+        );
     }
 
     // 买家确认挑战结束
@@ -661,8 +669,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 检查请求是否存在
-    modifier validRequest(uint256 tokenId, address requester) {
-        Request storage request = _requests[tokenId][requester];
+    modifier validRequest(uint256 tokenId, address buyer) {
+        Request storage request = _requests[tokenId][buyer];
         require(request.reqBatchPrice > 0 && request.reqBatchNumber > 0, "No valid request found");
         _;
     }
@@ -674,74 +682,74 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 检查请求是否已确认
-    modifier requestConfirmed(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].confirmed, "Request not confirmed yet");
+    modifier requestConfirmed(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].confirmed, "Request not confirmed yet");
         _;
     }
 
     // 检查请求是否未确认
-    modifier requestNotConfirmed(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].confirmed, "Request already confirmed");
+    modifier requestNotConfirmed(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].confirmed, "Request already confirmed");
         _;
     }
 
     // 检查买家是否已质押
-    modifier buyerDeposited(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].buyerDeposited, "Buyer has not deposited yet");
+    modifier buyerDeposited(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].buyerDeposited, "Buyer has not deposited yet");
         _;
     }
 
     // 检查买家是否未质押
-    modifier buyerNotDeposited(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].buyerDeposited, "Buyer already deposited");
+    modifier buyerNotDeposited(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].buyerDeposited, "Buyer already deposited");
         _;
     }
 
     // 检查所有者是否未质押
-    modifier ownerNotDeposited(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].ownerDeposited, "Owner already deposited");
+    modifier ownerNotDeposited(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].ownerDeposited, "Owner already deposited");
         _;
     }
 
     // 检查所有者是否已质押
-    modifier ownerDeposited(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].ownerDeposited, "Owner has not deposited yet");
+    modifier ownerDeposited(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].ownerDeposited, "Owner has not deposited yet");
         _;
     }
 
     // 检查挑战是否已发起
-    modifier challengeInitiated(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].challengeInitiated, "Challenge not initiated yet");
+    modifier challengeInitiated(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].challengeInitiated, "Challenge not initiated yet");
         _;
     }
 
     // 检查挑战是否未发起
-    modifier challengeNotInitiated(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].challengeInitiated, "Challenge already initiated");
+    modifier challengeNotInitiated(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].challengeInitiated, "Challenge already initiated");
         _;
     }
 
     // 检查向量是否已验证
-    modifier vectorsVerified(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].vectorsVerified, "Vectors not verified yet");
+    modifier vectorsVerified(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].vectorsVerified, "Vectors not verified yet");
         _;
     }
 
     // 检查向量是否未验证
-    modifier vectorsNotVerified(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].vectorsVerified, "Vectors already verified");
+    modifier vectorsNotVerified(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].vectorsVerified, "Vectors already verified");
         _;
     }
 
     // 检查买家是否已验证
-    modifier dataValidated(uint256 tokenId, address requester) {
-        require(_requests[tokenId][requester].dataValidated, "Buyer has not verified yet");
+    modifier dataValidated(uint256 tokenId, address buyer) {
+        require(_requests[tokenId][buyer].dataValidated, "Buyer has not verified yet");
         _;
     }
 
     // 检查买家是否未验证
-    modifier dataNotValidated(uint256 tokenId, address requester) {
-        require(!_requests[tokenId][requester].dataValidated, "Buyer already verified");
+    modifier dataNotValidated(uint256 tokenId, address buyer) {
+        require(!_requests[tokenId][buyer].dataValidated, "Buyer already verified");
         _;
     }
 }
