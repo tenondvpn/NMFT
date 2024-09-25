@@ -30,11 +30,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     Counters.Counter private _tokenIds;
     address public admin;
     uint256 public similarityThreshold = 95;
-    bool public isMatrixInitialized = false;
     uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
     uint256 public constant TRANSACTION_TIMEOUT = 1 days;
     uint256 public constant COMPRESSED_VECTOR_LENGTH = 256;
-    uint256 public constant MAX_VECTOR_LENGTH = 100;
+    uint256 public constant VECTOR_LENGTH = 512;
+    uint256 public constant PROJECTION_MATRIX_SEED = 1234567890;
 
     // 数据信息结构体
     struct DataInfo {
@@ -90,9 +90,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 存储每个tokenId和每个买家对应的Hashchain信息
     mapping(uint256 => mapping(address => HashchainInfo)) private _hashchainInfo;
 
-    // 公开的随机投影矩阵
-    int8[COMPRESSED_VECTOR_LENGTH][MAX_VECTOR_LENGTH] public projectionMatrix;
-
     // 事件：铸造NFT
     event DataNFTMinted(uint256 indexed tokenId, string description, uint256 batchPrice);
     // 事件：请求价格和批次数等
@@ -137,18 +134,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         admin = initialOwner;
     }
 
-    function setProjectionMatrix(int8[][] memory matrix) external onlyOwner {
-        require(!isMatrixInitialized, "Matrix already initialized");
-        require(matrix.length == COMPRESSED_VECTOR_LENGTH, "Invalid column length");
-        
-        for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
-            require(matrix[i].length == MAX_VECTOR_LENGTH, "Invalid row length");
-            for (uint j = 0; j < MAX_VECTOR_LENGTH; j++) {
-                projectionMatrix[i][j] = matrix[i][j];
-            }
-        }
-        
-        isMatrixInitialized = true;
+    function getProjectionMatrixValue(uint256 i, uint256 j) public pure returns (int256) {
+        bytes32 hash = keccak256(abi.encodePacked(PROJECTION_MATRIX_SEED, i, j));
+        return uint256(hash) % 2 == 0 ? int256(1) : int256(-1);
     }
 
     // 更新相似度阈值的函数
@@ -159,13 +147,13 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 压缩向量
-    function compressVector(int8[] memory vector) public view returns (uint256) {
-        require(vector.length <= MAX_VECTOR_LENGTH, "Vector too long");
+    function compressVector(int8[] memory vector) public pure returns (uint256) {
+        require(vector.length == VECTOR_LENGTH, "Vector length mismatch");
         uint256 compressed = 0;
         for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
             int256 dot = 0;
             for (uint j = 0; j < vector.length; j++) {
-                dot += int256(vector[j]) * int256(projectionMatrix[i][j]);
+                dot += int256(vector[j]) * getProjectionMatrixValue(i, j);
             }
             if (dot > 0) {
                 compressed |= (1 << i);
