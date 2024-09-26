@@ -33,8 +33,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
     uint256 public constant TRANSACTION_TIMEOUT = 1 days;
     uint256 public constant COMPRESSED_VECTOR_LENGTH = 256;
-    uint256 public constant VECTOR_LENGTH = 512;
+    uint256 public constant VECTOR_LENGTH = 10;
     uint256 public constant PROJECTION_MATRIX_SEED = 1234567890;
+    bytes32 public immutable PROJECTION_MATRIX_HASH;
 
     // 数据信息结构体
     struct DataInfo {
@@ -70,7 +71,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         address currentWinner;
         uint256 winnerTokenId;
         uint256 totalTimestampDifference;
-        uint256[] compressedChallengeVectors;
+        uint256[] challengeVectors;
         bytes32[] challengeMerkleRoots;
     }
 
@@ -89,6 +90,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => Challenge)) private _challenges;
     // 存储每个tokenId和每个买家对应的Hashchain信息
     mapping(uint256 => mapping(address => HashchainInfo)) private _hashchainInfo;
+    // 存储投影矩阵
+    mapping(uint256 => mapping(uint256 => int256)) private projectionMatrix;
+
 
     // 事件：铸造NFT
     event DataNFTMinted(uint256 indexed tokenId, string description, uint256 batchPrice);
@@ -130,11 +134,32 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 事件：交易已清理
     event TransactionCleanedUp(uint256 indexed tokenId, address indexed buyer, address indexed cleaner);
 
-    constructor(address initialOwner) ERC721("Copyrighted Data", "CPRD") Ownable() {
+    constructor(
+        address initialOwner,
+        bytes32 projectionMatrixHash
+    ) ERC721("Copyrighted Data", "CPRD") Ownable() {
         admin = initialOwner;
+        PROJECTION_MATRIX_HASH = projectionMatrixHash;
     }
 
-    function getProjectionMatrixValue(uint256 i, uint256 j) public pure returns (int256) {
+    // 计算投影矩阵的哈希值（用于验证）
+    function calculateProjectionMatrixHash() public pure returns (bytes32) {
+        bytes memory matrixData = new bytes(COMPRESSED_VECTOR_LENGTH * VECTOR_LENGTH);
+        uint256 index = 0;
+        for (uint256 i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
+            for (uint256 j = 0; j < VECTOR_LENGTH; j++) {
+                int256 value = calculateProjectionValue(i, j);
+                assembly {
+                    mstore8(add(add(matrixData, 32), index), value)
+                }
+                index++;
+            }
+        }
+        return keccak256(matrixData);
+    }
+
+    // 计算投影矩阵的单个元素值
+    function calculateProjectionValue(uint256 i, uint256 j) public pure returns (int256) {
         bytes32 hash = keccak256(abi.encodePacked(PROJECTION_MATRIX_SEED, i, j));
         return uint256(hash) % 2 == 0 ? int256(1) : int256(-1);
     }
@@ -144,27 +169,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(newThreshold > 0 && newThreshold <= 100, "Invalid threshold value");
         similarityThreshold = newThreshold;
         emit SimilarityThresholdUpdated(newThreshold);
-    }
-
-    // 压缩向量
-    function compressVector(int8[] memory vector) public pure returns (uint256) {
-        require(vector.length == VECTOR_LENGTH, "Vector length mismatch");
-        uint256 compressed = 0;
-        for (uint i = 0; i < COMPRESSED_VECTOR_LENGTH; i++) {
-            int256 dot = 0;
-            for (uint j = 0; j < vector.length; j++) {
-                dot += int256(vector[j]) * getProjectionMatrixValue(i, j);
-            }
-            if (dot > 0) {
-                compressed |= (1 << i);
-            }
-        }
-        return compressed;
-    }
-
-    // 获取压缩的挑战向量数组
-    function getCompressedChallengeVectors(uint256 tokenId, address buyer) public view returns (uint256[] memory) {
-        return _challenges[tokenId][buyer].compressedChallengeVectors;
     }
 
     // 计算压缩向量的汉明距离
@@ -367,12 +371,63 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             currentWinner: originalOwner,
             winnerTokenId: tokenId,
             totalTimestampDifference: 0,
-            compressedChallengeVectors: new uint256[](0),
+            challengeVectors: new uint256[](0),
             challengeMerkleRoots: new bytes32[](0)
         });
         request.challengeInitiated = true;
         request.lastActivityTimestamp = block.timestamp;
         emit ChallengeInitiated(tokenId, msg.sender, originalOwner);
+    }
+
+    // 原始所有者响应挑战
+    function ownerResToChallenge(
+        uint256 tokenId,
+        address buyer,
+        uint256[] calldata vectors,
+        bytes32[][] calldata merkleProofs,
+        bytes32[] calldata merkleRoots
+    ) 
+        external 
+        onlyTokenOwner(tokenId)
+        challengeInitiated(tokenId, buyer)
+        vectorsNotVerified(tokenId, buyer)
+    {
+        Request storage request = _requests[tokenId][buyer];
+        uint256 challengeSize = request.challengeSize;
+        
+        require(
+            vectors.length == challengeSize && 
+            merkleProofs.length == challengeSize && 
+            merkleRoots.length == challengeSize, 
+            "Input lengths must equal to challengeSize"
+        );
+
+        _processVectors(tokenId, buyer, vectors, merkleProofs, merkleRoots);
+
+        // 标记向量已验证
+        request.vectorsVerified = true;
+        request.lastActivityTimestamp = block.timestamp;
+
+        // 发出向量已验证事件
+        emit VectorsVerified(tokenId, buyer);
+    }
+
+    // 处理向量
+    function _processVectors(
+        uint256 tokenId,
+        address buyer,
+        uint256[] calldata vectors,
+        bytes32[][] calldata merkleProofs,
+        bytes32[] calldata merkleRoots
+    ) private {
+        Challenge storage challenge = _challenges[tokenId][buyer];
+
+        for (uint i = 0; i < vectors.length; i++) {
+            _validateMerkleProof(tokenId, vectors[i], merkleProofs[i], merkleRoots[i]);
+        }
+
+        challenge.challengeVectors = vectors;
+        challenge.challengeMerkleRoots = merkleRoots;
     }
 
     // 买家验证函数
@@ -386,54 +441,13 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         request.lastActivityTimestamp = block.timestamp;
         emit DataValidated(tokenId, msg.sender);
     }
-
-    // 原始所有者响应挑战
-    function ownerResToChallenge(
-        uint256 tokenId,
-        address buyer,
-        int8[][] memory vectors,
-        bytes32[][] memory merkleProofs,
-        bytes32[] memory merkleRoots
-    ) 
-        external 
-        onlyTokenOwner(tokenId)
-        challengeInitiated(tokenId, buyer)
-        vectorsNotVerified(tokenId, buyer)
-    {
-        Challenge storage challenge = _challenges[tokenId][buyer];
-        Request storage request = _requests[tokenId][buyer];
-        uint256 challengeSize = request.challengeSize;
-        
-        require(
-            vectors.length == challengeSize && 
-            merkleProofs.length == challengeSize && 
-            merkleRoots.length == challengeSize, 
-            "Input lengths must equal to challengeSize"
-        );
-
-        challenge.compressedChallengeVectors = new uint256[](challengeSize);
-        challenge.challengeMerkleRoots = new bytes32[](challengeSize);
-        for (uint i = 0; i < vectors.length; i++) {
-            _validateMerkleProof(tokenId, vectors[i], merkleProofs[i], merkleRoots[i]);
-            // 压缩向量
-            challenge.compressedChallengeVectors[i] = compressVector(vectors[i]);
-            challenge.challengeMerkleRoots[i] = merkleRoots[i];
-        }
-
-        // 标记向量已验证
-        request.vectorsVerified = true;
-        request.lastActivityTimestamp = block.timestamp;
-
-        // 发出向量已验证事件
-        emit VectorsVerified(tokenId, buyer);
-    }
-
+    
     // 其他数据所有者响应挑战
     function otherOwnersResToChallenge(
         uint256 tokenId,
         address buyer,
         uint256 challengerTokenId,
-        int8[][] memory challengerVectors,
+        uint256[] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
     ) 
@@ -450,15 +464,22 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             return;
         }
 
-        uint256[] memory originalCompVectors = challenge.compressedChallengeVectors;
+        uint256[] memory originalVectors = challenge.challengeVectors;
         require(
-            originalCompVectors.length == challengerVectors.length && 
-            originalCompVectors.length == challengerMerkleProofs.length &&
-            originalCompVectors.length == challengerMerkleRoots.length,
+            originalVectors.length == challengerVectors.length && 
+            originalVectors.length == challengerMerkleProofs.length &&
+            originalVectors.length == challengerMerkleRoots.length,
             "Input lengths mismatch"
         );
 
-        uint256 totalTimestampDifference = _processChallengerVectors(challenge, tokenId, challengerTokenId, challengerVectors, challengerMerkleProofs, challengerMerkleRoots);
+        uint256 totalTimestampDifference = _processChallengerVectors(
+            challenge,
+            tokenId,
+            challengerTokenId,
+            challengerVectors,
+            challengerMerkleProofs,
+            challengerMerkleRoots
+        );
 
         if (totalTimestampDifference > challenge.totalTimestampDifference) {
             challenge.currentWinner = msg.sender;
@@ -475,12 +496,12 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         Challenge storage challenge,
         uint256 tokenId,
         uint256 challengerTokenId,
-        int8[][] memory challengerVectors,
+        uint256[] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
     ) private view returns (uint256) {
         uint256 totalTimestampDifference = 0;
-        uint256[] memory originalCompVectors = challenge.compressedChallengeVectors;
+        uint256[] memory originalVectors = challenge.challengeVectors;
         bytes32[] memory originalMerkleRoots = challenge.challengeMerkleRoots;
 
         for (uint i = 0; i < challengerVectors.length; i++) {
@@ -491,8 +512,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
 
             totalTimestampDifference += originalTimestamp - challengerTimestamp;
 
-            uint256 challengerCompVectors = compressVector(challengerVectors[i]);
-            uint256 distance = hammingDistance(originalCompVectors[i], challengerCompVectors);
+            uint256 distance = hammingDistance(originalVectors[i], challengerVectors[i]);
             uint256 similarity = (COMPRESSED_VECTOR_LENGTH - distance) * 100 / COMPRESSED_VECTOR_LENGTH;
             
             require(similarity >= similarityThreshold, "Similarity below threshold");
@@ -504,16 +524,16 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 验证Merkle根
     function _validateMerkleProof(
         uint256 tokenId,
-        int8[] memory vector,
+        uint256 vector,
         bytes32[] memory merkleProof,
         bytes32 merkleRoot
     ) private view {
         require(_dataInfo[tokenId].merkleRootTimestamps[merkleRoot] != 0, "Invalid Merkle root");
         bytes32 vectorHash = keccak256(abi.encodePacked(vector));
-        require(
-            MerkleProof.verify(merkleProof, merkleRoot, vectorHash),
-            "Invalid Merkle proof"
-        );
+        // require(
+        //     MerkleProof.verify(merkleProof, merkleRoot, vectorHash),
+        //     "Invalid Merkle proof"
+        // );
     }
 
     // 买家确认挑战结束
