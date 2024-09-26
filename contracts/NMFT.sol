@@ -278,7 +278,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             dataValidated: false,
             lastActivityTimestamp: block.timestamp
         });
-        
+
         // 创建一个可读的字符串表示
         string memory tradeTypeStr = tradeType == TradeType.DataOnly ? "DataOnly" : "DataAndNFT";
         
@@ -292,6 +292,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             challengeSize,
             nftTransferFee
         );
+    }
+
+    // 获取请求信息
+    function getRequest(uint256 tokenId, address buyer) public view returns (Request memory) {
+        return _requests[tokenId][buyer];
     }
 
     // 所有者确认请求
@@ -639,8 +644,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             "Transaction has not timed out yet"
         );
         _cleanupTransaction(tokenId, buyer);
-
-        emit TransactionCleanedUp(tokenId, buyer, msg.sender);
     }
 
     // 内部清理函数
@@ -649,6 +652,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         delete _requests[tokenId][buyer];
         delete _challenges[tokenId][buyer];
         delete _hashchainInfo[tokenId][buyer];
+        emit TransactionCleanedUp(tokenId, buyer, msg.sender);
     }
 
     // 检查token是否存在
