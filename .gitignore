@@ -17,5 +17,7 @@ node_modules
 ignition/deployments/chain-31337
 
 *.txt
+*.csv
+*.png
 size.js
 gas.js
