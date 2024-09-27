@@ -23,6 +23,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "hardhat/console.sol";
 
 contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
@@ -71,8 +72,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         address currentWinner;
         uint256 winnerTokenId;
         uint256 totalTimestampDifference;
-        uint256[] challengeVectors;
-        bytes32[] challengeMerkleRoots;
+        bytes32 vectorsHash;
+        bytes32 merkleRootsHash;
+        uint256 vectorCount;
     }
 
     // Hashchain信息结构体
@@ -126,14 +128,17 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     // 事件：挑战结束
     event ChallengeResolved(uint256 indexed tokenId, address buyer, address indexed winner, uint256 indexed winnerTokenId);
     // 事件：响应挑战
-    event ChallengeResponseReceived(uint256 indexed tokenId, address indexed challenger, uint256 indexed challengerTokenId);
+    event ChallengeResponseReceived(uint256 indexed tokenId, address indexed challenger, uint256 challengerTokenId, address indexed currentWinner);
     // 事件：设置Hashchain tip
     event HashchainTipSet(uint256 indexed tokenId, address indexed buyer, address indexed winner, bytes32 tip, uint256 totalBatches);
     // 事件：确认最终支付
     event FinalPaymentConfirmed(uint256 indexed tokenId, address indexed buyer, address indexed winner, uint256 completedBatches);
     // 事件：交易已清理
     event TransactionCleanedUp(uint256 indexed tokenId, address indexed buyer, address indexed cleaner);
+    // 事件：记录完整的向量和 Merkle 根
+    event ChallengeVectorsRecorded(uint256 indexed tokenId, address indexed buyer, uint256[] vectors, bytes32[] merkleRoots);
 
+    // 构造函数
     constructor(
         address initialOwner,
         bytes32 projectionMatrixHash
@@ -201,6 +206,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, tokenURI);
         DataInfo storage newDataInfo = _dataInfo[tokenId];
+
         newDataInfo.batchPrice = batchPrice;
         newDataInfo.batchNumber = batchNumber;
         newDataInfo.latestMerkleRoot = merkleRoot;
@@ -267,21 +273,14 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         DataInfo storage dataInfo = _dataInfo[tokenId];
         require(reqBatchNumber <= dataInfo.batchNumber, "Requested batch number exceeds available batches");
         
-        _requests[tokenId][msg.sender] = Request({
-            reqBatchPrice: reqBatchPrice,
-            reqBatchNumber: reqBatchNumber,
-            tradeType: tradeType,
-            challengeSize: challengeSize,
-            nftTransferFee: nftTransferFee,
-            ownerDepositAmount: ownerDepositAmount,
-            confirmed: false,
-            buyerDeposited: false,
-            ownerDeposited: false,
-            challengeInitiated: false,
-            vectorsVerified: false,
-            dataValidated: false,
-            lastActivityTimestamp: block.timestamp
-        });
+        Request storage newRequest = _requests[tokenId][msg.sender];
+        newRequest.reqBatchPrice = reqBatchPrice;
+        newRequest.reqBatchNumber = reqBatchNumber;
+        newRequest.tradeType = tradeType;
+        newRequest.challengeSize = challengeSize;
+        newRequest.nftTransferFee = nftTransferFee;
+        newRequest.ownerDepositAmount = ownerDepositAmount;
+        newRequest.lastActivityTimestamp = block.timestamp;
 
         // 创建一个可读的字符串表示
         string memory tradeTypeStr = tradeType == TradeType.DataOnly ? "DataOnly" : "DataAndNFT";
@@ -329,7 +328,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             ? request.reqBatchPrice * request.reqBatchNumber
             : request.reqBatchPrice * request.reqBatchNumber + request.nftTransferFee;
 
-        require(msg.value == depositAmount, "Incorrect deposit amount");
+        require(msg.value == depositAmount, "Incorrect buyer deposit amount");
 
         request.buyerDeposited = true;
         request.lastActivityTimestamp = block.timestamp;
@@ -346,7 +345,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         ownerNotDeposited(tokenId, buyer) 
     {
         Request storage request = _requests[tokenId][buyer];
-        require(msg.value == request.ownerDepositAmount, "Incorrect deposit amount");
+        require(msg.value == request.ownerDepositAmount, "Incorrect owner deposit amount");
 
         request.ownerDeposited = true;
         request.lastActivityTimestamp = block.timestamp;
@@ -365,18 +364,28 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(!challenge.resolved, "Challenge already resolved");
 
         address originalOwner = ownerOf(tokenId);
-        _challenges[tokenId][msg.sender] = Challenge({
-            initiatedTimestamp: block.timestamp,
-            resolved: false,
-            currentWinner: originalOwner,
-            winnerTokenId: tokenId,
-            totalTimestampDifference: 0,
-            challengeVectors: new uint256[](0),
-            challengeMerkleRoots: new bytes32[](0)
-        });
+        Challenge storage newChallenge = _challenges[tokenId][msg.sender];
+        newChallenge.initiatedTimestamp = uint64(block.timestamp);
+        newChallenge.resolved = false;
+        newChallenge.currentWinner = originalOwner;
+        newChallenge.winnerTokenId = tokenId;
+        newChallenge.totalTimestampDifference = 0;
+        newChallenge.vectorsHash = bytes32(0);
+        newChallenge.merkleRootsHash = bytes32(0);
+        newChallenge.vectorCount = 0;
+        
         request.challengeInitiated = true;
         request.lastActivityTimestamp = block.timestamp;
         emit ChallengeInitiated(tokenId, msg.sender, originalOwner);
+    }
+
+    // 获取挑战信息
+    function getChallenge(uint256 tokenId, address buyer) 
+        public 
+        view 
+        returns (Challenge memory) 
+    {
+        return _challenges[tokenId][buyer];
     }
 
     // 原始所有者响应挑战
@@ -421,13 +430,17 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         bytes32[] calldata merkleRoots
     ) private {
         Challenge storage challenge = _challenges[tokenId][buyer];
-
+        uint256 gasLeft = gasleft();
         for (uint i = 0; i < vectors.length; i++) {
             _validateMerkleProof(tokenId, vectors[i], merkleProofs[i], merkleRoots[i]);
         }
-
-        challenge.challengeVectors = vectors;
-        challenge.challengeMerkleRoots = merkleRoots;
+        console.log("Gas used for _validateMerkleProof:", gasLeft - gasleft());
+        // 计算并存储哈希
+        challenge.vectorsHash = keccak256(abi.encodePacked(vectors));
+        challenge.merkleRootsHash = keccak256(abi.encodePacked(merkleRoots));
+        challenge.vectorCount = vectors.length;
+        // 发出事件，记录完整的向量和 Merkle 根
+        emit ChallengeVectorsRecorded(tokenId, buyer, vectors, merkleRoots);
     }
 
     // 买家验证函数
@@ -447,6 +460,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         uint256 tokenId,
         address buyer,
         uint256 challengerTokenId,
+        uint256[] memory originalVectors,
+        bytes32[] memory originalMerkleRoots,
         uint256[] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
@@ -459,13 +474,17 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(challenge.initiatedTimestamp != 0, "Challenge does not exist");
         require(!challenge.resolved, "Challenge already resolved");
 
+        // 验证提供的原始向量和 Merkle 根
+        require(keccak256(abi.encodePacked(originalVectors)) == challenge.vectorsHash, "Original vectors hash mismatch");
+        require(keccak256(abi.encodePacked(originalMerkleRoots)) == challenge.merkleRootsHash, "Original Merkle roots hash mismatch");
+
         if (block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW) {
             _resolveChallenge(tokenId, buyer);
             return;
         }
 
-        uint256[] memory originalVectors = challenge.challengeVectors;
         require(
+            originalVectors.length == challenge.vectorCount &&
             originalVectors.length == challengerVectors.length && 
             originalVectors.length == challengerMerkleProofs.length &&
             originalVectors.length == challengerMerkleRoots.length,
@@ -473,9 +492,10 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         );
 
         uint256 totalTimestampDifference = _processChallengerVectors(
-            challenge,
             tokenId,
             challengerTokenId,
+            originalVectors,
+            originalMerkleRoots,
             challengerVectors,
             challengerMerkleProofs,
             challengerMerkleRoots
@@ -488,34 +508,37 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         }
 
         _requests[tokenId][buyer].lastActivityTimestamp = block.timestamp;
-        emit ChallengeResponseReceived(tokenId, msg.sender, challengerTokenId);
+        emit ChallengeResponseReceived(tokenId, msg.sender, challengerTokenId, challenge.currentWinner);
     }
 
     // 处理挑战者向量
     function _processChallengerVectors(
-        Challenge storage challenge,
         uint256 tokenId,
         uint256 challengerTokenId,
+        uint256[] memory originalVectors,
+        bytes32[] memory originalMerkleRoots,
         uint256[] memory challengerVectors,
         bytes32[][] memory challengerMerkleProofs,
         bytes32[] memory challengerMerkleRoots
     ) private view returns (uint256) {
         uint256 totalTimestampDifference = 0;
-        uint256[] memory originalVectors = challenge.challengeVectors;
-        bytes32[] memory originalMerkleRoots = challenge.challengeMerkleRoots;
 
         for (uint i = 0; i < challengerVectors.length; i++) {
             _validateMerkleProof(challengerTokenId, challengerVectors[i], challengerMerkleProofs[i], challengerMerkleRoots[i]);
             uint256 challengerTimestamp = _dataInfo[challengerTokenId].merkleRootTimestamps[challengerMerkleRoots[i]];
             uint256 originalTimestamp = _dataInfo[tokenId].merkleRootTimestamps[originalMerkleRoots[i]];
-            require(challengerTimestamp < originalTimestamp, "Challenger Merkle root not earlier");
+            if (challengerTimestamp >= originalTimestamp) {
+                return 0;
+            }
 
             totalTimestampDifference += originalTimestamp - challengerTimestamp;
 
             uint256 distance = hammingDistance(originalVectors[i], challengerVectors[i]);
             uint256 similarity = (COMPRESSED_VECTOR_LENGTH - distance) * 100 / COMPRESSED_VECTOR_LENGTH;
             
-            require(similarity >= similarityThreshold, "Similarity below threshold");
+            if (similarity < similarityThreshold) {
+                return 0;
+            }
         }
 
         return totalTimestampDifference;
@@ -530,10 +553,10 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     ) private view {
         require(_dataInfo[tokenId].merkleRootTimestamps[merkleRoot] != 0, "Invalid Merkle root");
         bytes32 vectorHash = keccak256(abi.encodePacked(vector));
-        // require(
-        //     MerkleProof.verify(merkleProof, merkleRoot, vectorHash),
-        //     "Invalid Merkle proof"
-        // );
+        require(
+            MerkleProof.verify(merkleProof, merkleRoot, vectorHash),
+            "Invalid Merkle proof"
+        );
     }
 
     // 买家确认挑战结束
@@ -545,7 +568,6 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(challenge.initiatedTimestamp != 0, "Challenge does not exist");
         require(!challenge.resolved, "Challenge already resolved");
         require(block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW, "Challenge response window not closed yet");
-
         _resolveChallenge(tokenId, msg.sender);
     }
 
@@ -569,13 +591,15 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             payable(challenge.currentWinner).transfer(halfOwnerDepositAmount);
 
             // 对获胜者新建一个challenge，且已经resolved，保证获胜者不会被重复挑战
-            Challenge storage newChallenge = _challenges[challenge.winnerTokenId][challenge.currentWinner];
+            Challenge storage newChallenge = _challenges[challenge.winnerTokenId][buyer];
             newChallenge.resolved = true;
             newChallenge.currentWinner = challenge.currentWinner;
             newChallenge.winnerTokenId = challenge.winnerTokenId;
         }
+
         challenge.resolved = true;
         request.lastActivityTimestamp = block.timestamp;
+
         emit ChallengeResolved(tokenId, buyer, challenge.currentWinner, challenge.winnerTokenId);
     }
 
@@ -638,14 +662,13 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         // 检查是否完成所有批次
         if (totalCompletedBatches == request.reqBatchNumber) {
             hashchainInfo.isCompleted = true;
-            _cleanupTransaction(tokenId, buyer);
-        }
-        if (totalCompletedBatches == dataInfo.batchNumber) {
-            if (request.tradeType == TradeType.DataAndNFT) {
-                paymentAmount += request.nftTransferFee;
-                // 转移NFT
-                _transfer(msg.sender, buyer, challenge.winnerTokenId);
+            if (totalCompletedBatches == dataInfo.batchNumber) {
+                if (request.tradeType == TradeType.DataAndNFT) {
+                    paymentAmount += request.nftTransferFee;
+                    _transfer(msg.sender, buyer, tokenId);
+                }
             }
+            _cleanupTransaction(tokenId, buyer);
         }
 
         // 将资金转移给挑战胜利者

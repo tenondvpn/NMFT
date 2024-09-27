@@ -9,12 +9,31 @@ describe("NMFT", function () {
   // 定义共用的测试参数
   const batchPrice = ethers.parseEther("0.1");
   const tokenURI = "https://example.com/token/1";
-  const batchNumber = 10;
   const merkleRoot = ethers.keccak256(ethers.toUtf8Bytes("merkle root"));
   const description = "Test NFT";
 
   const reqBatchPrice = ethers.parseEther("0.1");
-  const challengeSize = 10;
+  const NFT_TRANSFER_FEE = ethers.parseEther("0.05");
+  const challengeSize = parseInt(process.env.CHALLENGE_SIZE || "10");
+  const newCompletedBatches = parseInt(process.env.NEW_COMPLETED_BATCHES || "2");
+  const batchNumber = parseInt(process.env.BATCH_NUMBER || "10");
+
+  let originalVectors, originalTree, originalRoot, originalMerkleProofs, originalMerkleRoots;
+  let challengerVectors, challengerTree, challengerRoot, challengerMerkleProofs, challengerMerkleRoots;
+
+  // 初始化原始向量和 Merkle 树
+  originalVectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
+  originalTree = new MerkleTree(originalVectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))), keccak256, { sort: true });
+  originalRoot = originalTree.getHexRoot();
+  originalMerkleProofs = originalVectors.map(v => originalTree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
+  originalMerkleRoots = Array(challengeSize).fill(originalRoot);
+
+  // 初始化挑战者的向量和 Merkle 树
+  challengerVectors = originalVectors; // 保证相似度超过阈值
+  challengerTree = new MerkleTree(challengerVectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))), keccak256, { sort: true });
+  challengerRoot = challengerTree.getHexRoot();
+  challengerMerkleProofs = challengerVectors.map(v => challengerTree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
+  challengerMerkleRoots = Array(challengeSize).fill(challengerRoot);
 
   beforeEach(async function () {
     [owner, addr1, addr2, addr3] = await ethers.getSigners();
@@ -39,7 +58,7 @@ describe("NMFT", function () {
 
   // 辅助函数：创建数据购买请求
   async function createDataPurchaseRequest(buyer, tokenId, reqBatchNumber = 5, tradeType = 0, ownerDepositAmount = ethers.parseEther("0.01")) {
-    const nftTransferFee = tradeType === 1 ? ethers.parseEther("0.05") : 0;
+    const nftTransferFee = tradeType === 1 ? NFT_TRANSFER_FEE : 0;
     const tx = await nmft.connect(buyer).requestDataPurchase(
       tokenId,
       reqBatchPrice,
@@ -50,6 +69,18 @@ describe("NMFT", function () {
       ownerDepositAmount
     );
     return tx;
+  }
+
+  // 辅助函数：计算买家存款金额
+  async function calculateBuyerDepositAmount(tokenId, buyer) {
+    const request = await nmft.getRequest(tokenId, buyer);
+    if (!request || !request.reqBatchPrice || !request.reqBatchNumber) {
+      throw new Error("Invalid request data");
+    }
+    const depositAmount = request.reqBatchPrice * BigInt(request.reqBatchNumber);
+    return request.tradeType === 1n 
+      ? depositAmount + NFT_TRANSFER_FEE 
+      : depositAmount;
   }
 
   describe("mintDataNFT", function () {
@@ -476,14 +507,9 @@ describe("NMFT", function () {
       const tree = new MerkleTree(leaves, keccak256, { sort: true });
       const root = tree.getHexRoot();
 
-      // console.log("Merkle Root:", root);
-
       const merkleProofs = vectors.map(v => {
       const leaf = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]));
       const proof = tree.getHexProof(leaf);
-      // console.log("Vector:", v);
-      // console.log("Leaf:", leaf);
-      // console.log("Proof:", proof);
         return proof;
       });
 
@@ -491,15 +517,6 @@ describe("NMFT", function () {
 
       // 更新合约中的 Merkle root
       await nmft.connect(addr1).updateMerkleRoot(tokenId, root);
-
-      // 执行 ownerResToChallenge 并捕获事件
-      // const tx = await nmft.connect(addr1).ownerResToChallenge(tokenId, addr2.address, vectors, merkleProofs, merkleRoots);
-      // const receipt = await tx.wait();
-      // const merkleDebugEvent = receipt.events.find(e => e.event === 'MerkleDebug');
-
-      // console.log("Contract Merkle Root:", merkleDebugEvent.args.merkleRoot);
-      // console.log("Contract Leaf:", merkleDebugEvent.args.leaf);
-      // console.log("Contract Merkle Proof:", merkleDebugEvent.args.merkleProof);
 
       // 执行 ownerResToChallenge
       await expect(nmft.connect(addr1).ownerResToChallenge(tokenId, addr2.address, vectors, merkleProofs, merkleRoots))
@@ -517,20 +534,6 @@ describe("NMFT", function () {
       await nmft.connect(addr3).buyerDeposit(tokenId1, { value: ethers.parseEther("0.5") });
       await nmft.connect(addr1).ownerDeposit(tokenId1, addr3.address, { value: ethers.parseEther("0.01") });
       await nmft.connect(addr3).initiateChallenge(tokenId1);
-  
-      // 模拟原始所有者响应挑战
-      const originalVectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
-      const originalTree = new MerkleTree(originalVectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))), keccak256, { sort: true });
-      const originalRoot = originalTree.getHexRoot();
-      const originalMerkleProofs = originalVectors.map(v => originalTree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
-      const originalMerkleRoots = Array(challengeSize).fill(originalRoot);
-
-      // 创建挑战者的向量和Merkle树
-      const challengerVectors = originalVectors; // 保证相似度超过阈值
-      const challengerTree = new MerkleTree(challengerVectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))), keccak256, { sort: true });
-      const challengerRoot = challengerTree.getHexRoot();
-      const challengerMerkleProofs = challengerVectors.map(v => challengerTree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
-      const challengerMerkleRoots = Array(challengeSize).fill(challengerRoot);
 
       await nmft.connect(addr2).updateMerkleRoot(tokenId2, challengerRoot);
       await ethers.provider.send("evm_mine"); // 挖一个新块，增加点时间
@@ -544,11 +547,13 @@ describe("NMFT", function () {
         tokenId1,
         addr3.address,
         tokenId2,
+        originalVectors,
+        originalMerkleRoots,
         challengerVectors,
         challengerMerkleProofs,
         challengerMerkleRoots
       )).to.emit(nmft, "ChallengeResponseReceived")
-        .withArgs(tokenId1, addr2.address, tokenId2);
+        .withArgs(tokenId1, addr2.address, tokenId2, addr2.address);
     });
   
     it("不应该能在挑战未发起时响应", async function () {
@@ -559,14 +564,12 @@ describe("NMFT", function () {
       await nmft.connect(addr3).buyerDeposit(tokenId1, { value: ethers.parseEther("0.5") });
       await nmft.connect(addr1).ownerDeposit(tokenId1, addr3.address, { value: ethers.parseEther("0.01") });
   
-      const challengerVectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
-      const challengerMerkleProofs = Array(challengeSize).fill([]);
-      const challengerMerkleRoots = Array(challengeSize).fill(ethers.ZeroHash);
-  
       await expect(nmft.connect(addr2).otherOwnersResToChallenge(
         tokenId1,
         addr3.address,
         tokenId2,
+        originalVectors,
+        originalMerkleRoots,
         challengerVectors,
         challengerMerkleProofs,
         challengerMerkleRoots
@@ -582,13 +585,6 @@ describe("NMFT", function () {
       await nmft.connect(addr1).ownerDeposit(tokenId1, addr3.address, { value: ethers.parseEther("0.01") });
       await nmft.connect(addr3).initiateChallenge(tokenId1);
   
-      // 模拟原始所有者响应挑战
-      const originalVectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
-      const originalTree = new MerkleTree(originalVectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))), keccak256, { sort: true });
-      const originalRoot = originalTree.getHexRoot();
-      const originalMerkleProofs = originalVectors.map(v => originalTree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
-      const originalMerkleRoots = Array(challengeSize).fill(originalRoot);
-  
       await nmft.connect(addr1).updateMerkleRoot(tokenId1, originalRoot);
       await nmft.connect(addr1).ownerResToChallenge(tokenId1, addr3.address, originalVectors, originalMerkleProofs, originalMerkleRoots);
   
@@ -599,65 +595,80 @@ describe("NMFT", function () {
       await ethers.provider.send("evm_increaseTime", [24 * 60 * 60]); // 增加24小时
       await ethers.provider.send("evm_mine"); // 挖一个新块
   
-      const challengerVectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
-      const challengerMerkleProofs = Array(challengeSize).fill([]);
-      const challengerMerkleRoots = Array(challengeSize).fill(ethers.ZeroHash);
-  
+      // 尝试响应挑战，这应该触发自动解决
       await expect(nmft.connect(addr2).otherOwnersResToChallenge(
         tokenId1,
         addr3.address,
         tokenId2,
+        originalVectors,
+        originalMerkleRoots,
         challengerVectors,
         challengerMerkleProofs,
         challengerMerkleRoots
-      )).to.be.revertedWith("Challenge already resolved");
+      )).to.emit(nmft, "ChallengeResolved")
+        .withArgs(tokenId1, addr3.address, addr1.address, tokenId1);
     });
   });
 
-//   describe("buyerConfirmChallengeEnd", function () {
-//     it("买家应该能成功确认挑战结束", async function () {
-//       const tokenId = await mintNFT(addr1, 1);
-//       await createDataPurchaseRequest(addr2, tokenId);
-//       await nmft.connect(addr1).confirmRequest(tokenId, addr2.address);
-//       await nmft.connect(addr2).buyerDeposit(tokenId, { value: ethers.parseEther("0.5") });
-//       await nmft.connect(addr1).ownerDeposit(tokenId, addr2.address, { value: ethers.parseEther("0.01") });
-//       await nmft.connect(addr2).initiateChallenge(tokenId);
-
-//       // 创建有效的 int8 向量
-//       const vectors = [
-//         [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
-//         [8, 7, 6, 5, 4, 3, 2, 1, 0, -1]
-//       ];
-
-//       // 创建 Merkle tree
-//       const leaves = vectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['int8[]'], [v])));
-//       const tree = new MerkleTree(leaves, keccak256, { sort: true });
-//       const root = tree.getHexRoot();
-
-//       const merkleProofs = vectors.map(v => tree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['int8[]'], [v]))));
-//       const merkleRoots = [root, root];
-
-//       // 更新合约中的 Merkle root
-//       await nmft.connect(addr1).updateMerkleRoot(tokenId, root);
-//       await nmft.connect(addr1).ownerResToChallenge(tokenId, addr2.address, vectors, merkleProofs, merkleRoots);
-
-//       await expect(nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId))
-//         .to.emit(nmft, "ChallengeEnded")
-//         .withArgs(tokenId, addr2.address);
-//     });
-
-//     it("买家不应该能在未超过时间窗口时确认挑战结束", async function () {
-//       const tokenId = await mintNFT(addr1, 1);
-//       await createDataPurchaseRequest(addr2, tokenId);
-//       await nmft.connect(addr1).confirmRequest(tokenId, addr2.address);
-//       await nmft.connect(addr2).buyerDeposit(tokenId, { value: ethers.parseEther("0.5") });
-//       await nmft.connect(addr1).ownerDeposit(tokenId, addr2.address, { value: ethers.parseEther("0.01") });
-//       await nmft.connect(addr2).initiateChallenge(tokenId);
-
-//       await expect(nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId))
-//         .to.be.revertedWith("Challenge response window not closed yet");
-//     });
-//   });
+  describe("buyerConfirmChallengeEnd", function () {
+    it("买家应该能成功确认挑战结束", async function () {
+      const tokenId = await mintNFT(addr1, 1);
+      await createDataPurchaseRequest(addr2, tokenId);
+      await nmft.connect(addr1).confirmRequest(tokenId, addr2.address);
+      await nmft.connect(addr2).buyerDeposit(tokenId, { value: ethers.parseEther("0.5") });
+      await nmft.connect(addr1).ownerDeposit(tokenId, addr2.address, { value: ethers.parseEther("0.01") });
+      await nmft.connect(addr2).initiateChallenge(tokenId);
+  
+      // 创建有效的向量
+      const vectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
+  
+      // 创建 Merkle tree
+      const leaves = vectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v])));
+      const tree = new MerkleTree(leaves, keccak256, { sort: true });
+      const root = tree.getHexRoot();
+  
+      const merkleProofs = vectors.map(v => tree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
+      const merkleRoots = Array(challengeSize).fill(root);
+  
+      // 更新合约中的 Merkle root
+      await nmft.connect(addr1).updateMerkleRoot(tokenId, root);
+      await ethers.provider.send("evm_mine"); // 挖一个新块
+      await nmft.connect(addr1).ownerResToChallenge(tokenId, addr2.address, vectors, merkleProofs, merkleRoots);
+  
+      // 模拟时间经过
+      await ethers.provider.send("evm_increaseTime", [24 * 60 * 60]); // 增加24小时
+      await ethers.provider.send("evm_mine"); // 挖一个新块
+  
+      await expect(nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId))
+        .to.emit(nmft, "ChallengeResolved")
+        .withArgs(tokenId, addr2.address, addr1.address, tokenId);
+    });
+  
+    it("买家不应该能在未超过时间窗口时确认挑战结束", async function () {
+      const tokenId = await mintNFT(addr1, 1);
+      await createDataPurchaseRequest(addr2, tokenId);
+      await nmft.connect(addr1).confirmRequest(tokenId, addr2.address);
+      await nmft.connect(addr2).buyerDeposit(tokenId, { value: ethers.parseEther("0.5") });
+      await nmft.connect(addr1).ownerDeposit(tokenId, addr2.address, { value: ethers.parseEther("0.01") });
+      await nmft.connect(addr2).initiateChallenge(tokenId);
+  
+      // 创建有效的向量
+      const vectors = Array(challengeSize).fill().map(() => ethers.toBigInt(ethers.randomBytes(32)));
+      const leaves = vectors.map(v => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v])));
+      const tree = new MerkleTree(leaves, keccak256, { sort: true });
+      const root = tree.getHexRoot();
+      const merkleProofs = vectors.map(v => tree.getHexProof(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [v]))));
+      const merkleRoots = Array(challengeSize).fill(root);
+  
+      await nmft.connect(addr1).updateMerkleRoot(tokenId, root);
+      await ethers.provider.send("evm_mine"); // 挖一个新块
+      await nmft.connect(addr1).ownerResToChallenge(tokenId, addr2.address, vectors, merkleProofs, merkleRoots);
+  
+      // 不增加时间，直接尝试确认挑战结束
+      await expect(nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId))
+        .to.be.revertedWith("Challenge response window not closed yet");
+    });
+  });
 
   describe("setHashchainTip", function () {
     it("买家应该能成功设置哈希链顶部", async function () {
@@ -735,7 +746,6 @@ describe("NMFT", function () {
       await ethers.provider.send("evm_mine");
       await nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId);
 
-      const newCompletedBatches = 2;
       let finalHash = ethers.keccak256(ethers.toUtf8Bytes("final hash"));
       let hashchainTip = finalHash;
 
@@ -769,50 +779,86 @@ describe("NMFT", function () {
       await nmft.connect(addr2).setHashchainTip(tokenId, hashchainTip);
   
       const finalHash = ethers.keccak256(ethers.toUtf8Bytes("final hash"));
-      const newCompletedBatches = 2;
   
       await expect(nmft.connect(addr3).confirmFinalPayment(tokenId, addr2.address, finalHash, newCompletedBatches))
         .to.be.revertedWith("Only the challenge winner can confirm final payment");
     });
   
-    // it("应该正确处理最后一批次的支付和NFT转移", async function () {
-    //   const tokenId = await mintNFT(addr1, 1);
-    //   await createDataPurchaseRequest(addr2, tokenId, batchNumber, 1, ethers.parseEther("0.01")); // TradeType.DataAndNFT
-    //   await nmft.connect(addr1).confirmRequest(tokenId, addr2.address);
-    //   await nmft.connect(addr2).buyerDeposit(tokenId, { value: ethers.parseEther("1.05") }); // 1 + 0.05
-    //   await nmft.connect(addr1).ownerDeposit(tokenId, addr2.address, { value: ethers.parseEther("0.01") });
-    //   await nmft.connect(addr2).initiateChallenge(tokenId);
-    //   await nmft.connect(addr2).buyerVerifyChallenge(tokenId);
-  
-    //   // 模拟挑战结束
-    //   await ethers.provider.send("evm_increaseTime", [24 * 60 * 60]);
-    //   await ethers.provider.send("evm_mine");
-    //   await nmft.connect(addr2).buyerConfirmChallengeEnd(tokenId);
-  
-    //   const newCompletedBatches = batchNumber; // 完成所有批次
-    //   let finalHash = ethers.keccak256(ethers.toUtf8Bytes("final hash"));
-    //   let hashchainTip = finalHash;
+    it("应该正确处理最后一批次的支付和NFT转移", async function () {
+      const tokenId1 = await mintNFT(addr1, 1);
+      const tokenId2 = await mintNFT(addr2, 2);
+      const newCompletedBatches = batchNumber; // 完成所有批次
+      await createDataPurchaseRequest(addr3, tokenId1, batchNumber, 1, ethers.parseEther("0.01")); // TradeType.DataAndNFT
+      await nmft.connect(addr1).confirmRequest(tokenId1, addr3.address);
+      const buyerDepositAmount = await calculateBuyerDepositAmount(tokenId1, addr3.address);
+      await nmft.connect(addr3).buyerDeposit(tokenId1, { value: buyerDepositAmount });
+      await nmft.connect(addr1).ownerDeposit(tokenId1, addr3.address, { value: ethers.parseEther("0.01") });
+      await nmft.connect(addr3).initiateChallenge(tokenId1);
 
-    //   // 模拟哈希链
-    //   for (let i = 0; i < newCompletedBatches; i++) {
-    //     hashchainTip = ethers.keccak256(hashchainTip);
-    //   }
+      await nmft.connect(addr2).updateMerkleRoot(tokenId2, challengerRoot);
+      await ethers.provider.send("evm_mine"); // 挖一个新块，增加点时间
+      await nmft.connect(addr1).updateMerkleRoot(tokenId1, originalRoot);
+      await nmft.connect(addr1).ownerResToChallenge(tokenId1, addr3.address, originalVectors, originalMerkleProofs, originalMerkleRoots);
+  
+      // 模拟买家验证
+      await nmft.connect(addr3).buyerVerifyChallenge(tokenId1);
+  
+      // 尝试响应挑战，这应该触发自动解决
+      await nmft.connect(addr2).otherOwnersResToChallenge(
+        tokenId1,
+        addr3.address,
+        tokenId2,
+        originalVectors,
+        originalMerkleRoots,
+        challengerVectors,
+        challengerMerkleProofs,
+        challengerMerkleRoots
+      )
+  
+      // 模拟挑战结束
+      await ethers.provider.send("evm_increaseTime", [24 * 60 * 60]);
+      await ethers.provider.send("evm_mine");
+      await nmft.connect(addr3).buyerConfirmChallengeEnd(tokenId1);
+  
+      let finalHash = ethers.keccak256(ethers.toUtf8Bytes("final hash"));
+      let hashchainTip = finalHash;
 
-    //   await nmft.connect(addr2).setHashchainTip(tokenId, hashchainTip);
-    //   const request = await nmft.getRequest(tokenId, addr2.address);
-    //   console.log("Request trade type:", request.tradeType);
-    //   console.log("Request batch number:", request.reqBatchNumber);
-  
-    //   await expect(nmft.connect(addr1).confirmFinalPayment(tokenId, addr2.address, finalHash, newCompletedBatches))
-    //     .to.emit(nmft, "FinalPaymentConfirmed")
-    //     .withArgs(tokenId, addr2.address, addr1.address, newCompletedBatches)
-    //     .to.emit(nmft, "TransactionCleanedUp")
-    //     .withArgs(tokenId, addr2.address, addr1.address)
-    //     .to.emit(nmft, "Transfer")
-    //     .withArgs(addr1.address, addr2.address, tokenId);
-  
-    //   expect(await nmft.ownerOf(tokenId)).to.equal(addr2.address);
-    // });
+      // 假設addr2挑战成功
+      await createDataPurchaseRequest(addr3, tokenId2, batchNumber, 1, ethers.parseEther("0.01")); // TradeType.DataAndNFT
+      await nmft.connect(addr2).confirmRequest(tokenId2, addr3.address);
+      await nmft.connect(addr3).buyerDeposit(tokenId2, { value: buyerDepositAmount });
+      await nmft.connect(addr2).ownerDeposit(tokenId2, addr3.address, { value: ethers.parseEther("0.01") });
+
+      // 模拟哈希链
+      for (let i = 0; i < newCompletedBatches; i++) {
+        hashchainTip = ethers.keccak256(hashchainTip);
+      }
+
+      await nmft.connect(addr3).setHashchainTip(tokenId2, hashchainTip);
+      const request = await nmft.getRequest(tokenId2, addr3.address);
+      expect(request.tradeType).to.equal(1); // TradeType.DataAndNFT
+      expect(request.reqBatchNumber).to.equal(batchNumber);
+      const dataInfo = await nmft.getDataInfo(tokenId2);
+      expect(dataInfo.batchNumber).to.equal(batchNumber);
+      
+      const initialOwner = await nmft.ownerOf(tokenId2);
+      expect(initialOwner).to.equal(addr2.address);
+
+      await expect(nmft.connect(addr2).confirmFinalPayment(tokenId2, addr3.address, finalHash, newCompletedBatches))
+        .to.emit(nmft, "FinalPaymentConfirmed")
+        .withArgs(tokenId2, addr3.address, addr2.address, newCompletedBatches)
+        .to.emit(nmft, "TransactionCleanedUp")
+        .withArgs(tokenId2, addr3.address, addr2.address)
+        .to.emit(nmft, "Transfer")
+        .withArgs(addr2.address, addr3.address, tokenId2);
+
+      const finalOwner = await nmft.ownerOf(tokenId2);
+      expect(finalOwner).to.equal(addr3.address);
+
+      // 验证请求已被清理
+      const cleanedRequest = await nmft.getRequest(tokenId2, addr3.address);
+      expect(cleanedRequest.confirmed).to.be.false;
+    });
   });
   
   describe("ownerCleanupTransaction", function () {
