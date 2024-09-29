@@ -632,6 +632,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         emit HashchainTipSet(tokenId, msg.sender, challenge.currentWinner, tip, request.reqBatchNumber);
     }
 
+    // 买家确认最终支付
     function confirmFinalPayment(uint256 tokenId, address buyer, bytes32 finalHash, uint256 newCompletedBatches) 
         external 
         nonReentrant
