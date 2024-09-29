@@ -72,8 +72,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         address currentWinner;
         uint256 winnerTokenId;
         uint256 totalTimestampDifference;
-        bytes32 vectorsHash;
-        bytes32 merkleRootsHash;
+        bytes32 combinedHash;
         uint256 vectorCount;
     }
 
@@ -370,8 +369,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         newChallenge.currentWinner = originalOwner;
         newChallenge.winnerTokenId = tokenId;
         newChallenge.totalTimestampDifference = 0;
-        newChallenge.vectorsHash = bytes32(0);
-        newChallenge.merkleRootsHash = bytes32(0);
+        newChallenge.combinedHash = bytes32(0);
         newChallenge.vectorCount = 0;
         
         request.challengeInitiated = true;
@@ -430,16 +428,19 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         bytes32[] calldata merkleRoots
     ) private {
         Challenge storage challenge = _challenges[tokenId][buyer];
-        uint256 gasLeft = gasleft();
+
         for (uint i = 0; i < vectors.length; i++) {
             _validateMerkleProof(tokenId, vectors[i], merkleProofs[i], merkleRoots[i]);
         }
-        console.log("Gas used for _validateMerkleProof:", gasLeft - gasleft());
-        // 计算并存储哈希
-        challenge.vectorsHash = keccak256(abi.encodePacked(vectors));
-        challenge.merkleRootsHash = keccak256(abi.encodePacked(merkleRoots));
+
+        bytes32 combinedHash = keccak256(abi.encodePacked(
+            keccak256(abi.encodePacked(vectors)),
+            keccak256(abi.encodePacked(merkleRoots))
+        ));
+        challenge.combinedHash = combinedHash;
+
         challenge.vectorCount = vectors.length;
-        // 发出事件，记录完整的向量和 Merkle 根
+
         emit ChallengeVectorsRecorded(tokenId, buyer, vectors, merkleRoots);
     }
 
@@ -475,8 +476,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         require(!challenge.resolved, "Challenge already resolved");
 
         // 验证提供的原始向量和 Merkle 根
-        require(keccak256(abi.encodePacked(originalVectors)) == challenge.vectorsHash, "Original vectors hash mismatch");
-        require(keccak256(abi.encodePacked(originalMerkleRoots)) == challenge.merkleRootsHash, "Original Merkle roots hash mismatch");
+        bytes32 providedCombinedHash = keccak256(abi.encodePacked(
+            keccak256(abi.encodePacked(originalVectors)),
+            keccak256(abi.encodePacked(originalMerkleRoots))
+        ));
+        require(providedCombinedHash == challenge.combinedHash, "Combined hash mismatch");
 
         if (block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW) {
             _resolveChallenge(tokenId, buyer);
