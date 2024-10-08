@@ -21,3 +21,4 @@ ignition/deployments/chain-31337
 *.png
 size.js
 gas.js
+__pycache__
