@@ -368,7 +368,7 @@ describe("NMFT", function () {
 
       const incorrectAmount = ethers.parseEther("0.4");
       await expect(nmft.connect(addr2).buyerDeposit(tokenId, { value: incorrectAmount }))
-        .to.be.revertedWith("Incorrect deposit amount");
+        .to.be.revertedWith("Incorrect buyer deposit amount");
     });
 
     it("买家不应该能在请求未确认时质押", async function () {
