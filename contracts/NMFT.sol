@@ -220,10 +220,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     function getDataInfo(uint256 tokenId) public view returns (
         uint256 batchPrice,
         uint256 batchNumber,
+        uint256 nftTransferFee,
         bytes32 latestMerkleRoot
     ) {
         DataInfo storage info = _dataInfo[tokenId];
-        return (info.batchPrice, info.batchNumber, info.latestMerkleRoot);
+        return (info.batchPrice, info.batchNumber, info.nftTransferFee, info.latestMerkleRoot);
     }
     
     // 转移NFT
