@@ -42,6 +42,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     struct DataInfo {
         uint256 batchPrice;    // 批次价格
         uint256 batchNumber;   // 批次数量
+        uint256 nftTransferFee;  // NFT转移费用
         bytes32 latestMerkleRoot;    // 最新的Merkle树根
         mapping(bytes32 => uint256) merkleRootTimestamps; // Merkle树根的时间戳
     }
@@ -96,7 +97,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
 
 
     // 事件：铸造NFT
-    event DataNFTMinted(uint256 indexed tokenId, string description, uint256 batchPrice);
+    event DataNFTMinted(uint256 indexed tokenId, string description, uint256 batchPrice, uint256 batchNumber, uint256 nftTransferFee);
     // 事件：请求价格和批次数等
     event RequestMade(
         uint256 indexed tokenId,
@@ -197,6 +198,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         string memory tokenURI, 
         uint256 batchPrice, 
         uint256 batchNumber, 
+        uint256 nftTransferFee,
         bytes32 merkleRoot, 
         string memory description
     ) external {
@@ -208,9 +210,10 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
 
         newDataInfo.batchPrice = batchPrice;
         newDataInfo.batchNumber = batchNumber;
+        newDataInfo.nftTransferFee = nftTransferFee;
         newDataInfo.latestMerkleRoot = merkleRoot;
         newDataInfo.merkleRootTimestamps[merkleRoot] = block.timestamp;
-        emit DataNFTMinted(tokenId, description, batchPrice);
+        emit DataNFTMinted(tokenId, description, batchPrice, batchNumber, nftTransferFee);
     }
 
     // 获取数据信息
