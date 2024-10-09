@@ -32,7 +32,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     address public admin;
     uint256 public similarityThreshold = 95;
     uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
-    uint256 public constant TRANSACTION_TIMEOUT = 1 days;
+    uint256 public constant TRANSACTION_TIMEOUT = 24 hours;
     uint256 public constant COMPRESSED_VECTOR_LENGTH = 256;
     uint256 public constant VECTOR_LENGTH = 10;
     uint256 public constant PROJECTION_MATRIX_SEED = 1234567890;
