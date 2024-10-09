@@ -17,6 +17,7 @@ describe("NMFT", function () {
   const challengeSize = parseInt(process.env.CHALLENGE_SIZE || "10");
   const newCompletedBatches = parseInt(process.env.NEW_COMPLETED_BATCHES || "2");
   const batchNumber = parseInt(process.env.BATCH_NUMBER || "10");
+  const nftTransferFee = ethers.parseEther("1");
 
   let originalVectors, originalTree, originalRoot, originalMerkleProofs, originalMerkleRoots;
   let challengerVectors, challengerTree, challengerRoot, challengerMerkleProofs, challengerMerkleRoots;
@@ -49,6 +50,7 @@ describe("NMFT", function () {
       tokenURI,
       batchPrice,
       batchNumber,
+      nftTransferFee,
       merkleRoot,
       description
     );
@@ -207,6 +209,7 @@ describe("NMFT", function () {
         tokenURI,
         batchPrice,
         batchNumber,
+        nftTransferFee,
         merkleRoot,
         description
       );
