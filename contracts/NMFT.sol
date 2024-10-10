@@ -123,6 +123,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     event VectorsVerified(uint256 indexed tokenId, address indexed buyer);
     // 事件：更新Merkle根
     event MerkleRootUpdated(uint256 indexed tokenId, bytes32 newMerkleRoot);
+    // 事件：更新数据信息
+    event DataInfoUpdated(uint256 indexed tokenId, uint256 newBatchPrice, uint256 newBatchNumber, uint256 newNftTransferFee, bytes32 indexed newMerkleRoot);
     // 事件：买家验证通过
     event DataValidated(uint256 indexed tokenId, address indexed buyer);
     // 事件：挑战结束
@@ -245,6 +247,43 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         dataInfo.merkleRootTimestamps[newMerkleRoot] = block.timestamp;
         dataInfo.latestMerkleRoot = newMerkleRoot;
         emit MerkleRootUpdated(tokenId, newMerkleRoot);
+    }
+
+    // 更新数据信息
+    function updateDataInfo(
+        uint256 tokenId,
+        uint256 newBatchPrice,
+        uint256 newBatchNumber,
+        uint256 newNftTransferFee,
+        bytes32 newMerkleRoot
+    ) external onlyTokenOwner(tokenId) {
+        DataInfo storage dataInfo = _dataInfo[tokenId];
+
+        if (newBatchPrice > 0) {
+            dataInfo.batchPrice = newBatchPrice;
+        }
+
+        if (newBatchNumber > 0) {
+            dataInfo.batchNumber = newBatchNumber;
+        }
+
+        if (newNftTransferFee > 0) {
+            dataInfo.nftTransferFee = newNftTransferFee;
+        }
+
+        if (newMerkleRoot != bytes32(0)) {
+            require(dataInfo.merkleRootTimestamps[newMerkleRoot] == 0, "Merkle root already exists");
+            dataInfo.merkleRootTimestamps[newMerkleRoot] = block.timestamp;
+            dataInfo.latestMerkleRoot = newMerkleRoot;
+        }
+
+        emit DataInfoUpdated(
+            tokenId,
+            newBatchPrice,
+            newBatchNumber,
+            newNftTransferFee,
+            newMerkleRoot
+        );
     }
 
     // 获取Merkle根的时间戳
