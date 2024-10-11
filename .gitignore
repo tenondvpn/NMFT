@@ -22,4 +22,5 @@ ignition/deployments/chain-31337
 size.js
 gas.js
 __pycache__
+*.ipynb
 .env
