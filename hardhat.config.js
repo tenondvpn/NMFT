@@ -1,7 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
-
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -33,6 +33,24 @@ module.exports = {
       gasPrice: "auto",
       // blockGasLimit: 100000000,  // 增加到 100 million
     },
+    localhost: {
+      url: "http://localhost:8545",
+      gas: "auto",
+      gasPrice: "auto",
+    },
+    sepolia: {
+      url: `https://sepolia.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
+      accounts: [process.env.PRIVATE_KEY]
+      // url: "https://ethereum-sepolia-rpc.publicnode.com",
+      // chainId: 11155111
+    },
+    shardora: {
+      url: "http://localhost:8545", // 需要修改成 Shardora 节点
+      accounts: [process.env.PRIVATE_KEY] // 使用本地 Shardora 账户
+    }
   },
-  plugins: ["solidity-coverage"]
+  plugins: ["solidity-coverage"],
+  mocha: {
+    timeout: 86400000 // 24 小时（以毫秒为单位）
+  }
 };
