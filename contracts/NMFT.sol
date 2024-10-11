@@ -23,7 +23,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "hardhat/console.sol";
 
 contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
@@ -675,7 +674,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         emit HashchainTipSet(tokenId, msg.sender, challenge.currentWinner, tip, request.reqBatchNumber);
     }
 
-    // 买家确认最终支付
+    // 所有者确认最终支付
     function confirmFinalPayment(uint256 tokenId, address buyer, bytes32 finalHash, uint256 newCompletedBatches) 
         external 
         nonReentrant

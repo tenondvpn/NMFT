@@ -39,7 +39,7 @@ describe("NMFT", function () {
   beforeEach(async function () {
     [owner, addr1, addr2, addr3] = await ethers.getSigners();
     NMFT = await ethers.getContractFactory("NMFT");
-    nmft = await NMFT.deploy(owner.address, "0x6e0c627900b24bd432fe7b2f239ed3c1e1c1d21aed740e80d1e805fc1dfe9a2a");
+    nmft = await NMFT.deploy(owner.address, "0xec7803457c25cb110ea6f74c048e1232264223783c370afed1473516b67857be");
     await nmft.waitForDeployment();
   });
 
