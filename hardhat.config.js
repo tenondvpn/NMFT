@@ -16,7 +16,7 @@ module.exports = {
     }
   },
   gasReporter: {
-    enabled: true,
+    enabled: false,
     currency: 'USD',
     gasPrice: 21,
     noColors: true,
