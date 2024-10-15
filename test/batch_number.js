@@ -6,33 +6,36 @@ const path = require('path');
 const hre = require("hardhat");
 
 const network = hre.network.name;
-const csvFileName = `${network}_performance.csv`;
+const csvFileName = `${network}_batch_number.csv`;
 const batchNumber = 1000;
-const reqBatchNumber = 10;
-const newCompletedBatches = 10;
+const reqBatchNumber = 1000;
 const challengeSize = 10;
 const reqBatchPrice = ethers.parseEther("0.1");
 const tradeType = 1; // 1 代表 TradeType.DataAndNFT
 const nftTransferFee = ethers.parseEther("1");
 const ownerDepositAmount = ethers.parseEther("1");
-const tradeNumber = parseInt(process.env.TRADE_NUMBER || "1", 10);
 let contractAddress;
 let globalVectors = [];
 let globalMerkleRoot = '';
 
+// 创建测试参数数组
+const testParams = Array.from({ length: 100 }, (_, index) => ({
+  tokenIdOffset: index + 1,
+  newCompletedBatches: (index + 1) * 10
+}));
+
 function appendToCSV(data) {
   const csvFilePath = path.join(__dirname, `../results/${csvFileName}`);
-  const csvLine = `${data.method},${data.latency},${data.gas},${data.contractAddress},${data.time},${data.receipt}\n`;
+  const csvLine = `${data.method},${data.batchNumber},${data.latency},${data.gas},${data.contractAddress},${data.time},${data.receipt}\n`;
 
   if (!fs.existsSync(csvFilePath)) {
-    fs.writeFileSync(csvFilePath, 'method,latency,gas,contract_address,time,receipt\n');
+    fs.writeFileSync(csvFilePath, 'method,batchNumber,latency,gas,contractAddress,time,receipt\n');
   }
 
   fs.appendFileSync(csvFilePath, csvLine);
 }
 
-
-describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
+describe(`NMFT Contract on ${network} - Scalability Analysis`, function() {
   let nmft;
   let owner;
   let buyer;
@@ -63,43 +66,40 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     const abi = await NMFT.interface.format('json');
     nmft = new ethers.Contract(contractAddress, abi, owner);
 
-    // console.log("ABI:", JSON.stringify(nmft.interface.format('json'), null, 2));
-
     const totalSupply = await nmft.totalSupply();
     console.log("NFT总供应量:", Number(totalSupply));
     startTokenId = Number(totalSupply);
     console.log(`从 tokenId = ${startTokenId + 1} 开始`);
   });
 
-  it(`should perform all operations ${tradeNumber} times`, async function() {
-
-    for (let i = 0; i < tradeNumber; i++) {
-      const currentTokenId = startTokenId + i + 1;
-      console.log(`\n开始第 ${i + 1} 轮测试，tokenId: ${currentTokenId}`);
+  it("should test all functions with different newCompletedBatches", async function() {
+    for (const { tokenIdOffset, newCompletedBatches } of testParams) {
+      const currentTokenId = startTokenId + tokenIdOffset;
+      console.log(`\n开始测试 newCompletedBatches = ${newCompletedBatches}, tokenId: ${currentTokenId}`);
 
       try {
-        await mintDataNFT(currentTokenId);
-        await requestDataPurchase(currentTokenId);
-        await confirmRequest(currentTokenId);
-        await buyerDeposit(currentTokenId);
-        await ownerDeposit(currentTokenId);
-        await initiateChallenge(currentTokenId);
-        await ownerResToChallenge(currentTokenId);
-        await buyerVerifyChallenge(currentTokenId);
-        await otherOwnersResToChallenge(currentTokenId);
-        await buyerConfirmChallengeEnd(currentTokenId);
-        await setHashchainTip(currentTokenId);
-        await confirmFinalPayment(currentTokenId);
+        await mintDataNFT(currentTokenId, newCompletedBatches);
+        await requestDataPurchase(currentTokenId, newCompletedBatches);
+        await confirmRequest(currentTokenId, newCompletedBatches);
+        await buyerDeposit(currentTokenId, newCompletedBatches);
+        await ownerDeposit(currentTokenId, newCompletedBatches);
+        await initiateChallenge(currentTokenId, newCompletedBatches);
+        await ownerResToChallenge(currentTokenId, newCompletedBatches);
+        await buyerVerifyChallenge(currentTokenId, newCompletedBatches);
+        await otherOwnersResToChallenge(currentTokenId, newCompletedBatches);
+        await buyerConfirmChallengeEnd(currentTokenId, newCompletedBatches);
+        await setHashchainTip(currentTokenId, newCompletedBatches);
+        await confirmFinalPayment(currentTokenId, newCompletedBatches);
 
-        console.log(`第 ${i + 1} 轮测试完成`);
+        console.log(`测试完成 newCompletedBatches = ${newCompletedBatches}`);
       } catch (error) {
-        console.error(`第 ${i + 1} 轮测试失败:`, error.message);
-        throw error; // 抛出错误以停止测试
+        console.error(`测试失败 newCompletedBatches = ${newCompletedBatches}:`, error.message);
+        throw error;
       }
     }
   });
 
-  async function mintDataNFT(i) {
+  async function mintDataNFT(i, newCompletedBatches) {
     const to = owner.address;
     const tokenURI = `https://example.com/token/${i}`;
     const batchPrice = ethers.parseEther("0.1");
@@ -117,6 +117,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'mintDataNFT',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -127,7 +128,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`mintDataNFT 测试完成`);
   }
 
-  async function requestDataPurchase(i) {
+  async function requestDataPurchase(i, newCompletedBatches) {
     const tokenId = i;
 
     const startTime = Date.now();
@@ -148,6 +149,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'requestDataPurchase',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -158,7 +160,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`requestDataPurchase 测试完成`);
   }
 
-  async function confirmRequest(i) {
+  async function confirmRequest(i, newCompletedBatches) {
     const tokenId = i;
 
     const startTime = Date.now();
@@ -171,6 +173,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'confirmRequest',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -181,7 +184,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`confirmRequest 测试完成`);
   }
 
-  async function buyerDeposit(i) {
+  async function buyerDeposit(i, newCompletedBatches) {
     const tokenId = i;
     depositAmount = tradeType === 1 
       ? reqBatchPrice * BigInt(reqBatchNumber) + nftTransferFee 
@@ -197,6 +200,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'buyerDeposit',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -207,7 +211,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`buyerDeposit 测试完成`);
   }
 
-  async function ownerDeposit(i) {
+  async function ownerDeposit(i, newCompletedBatches) {
     const tokenId = i;
     const depositAmount = ethers.parseEther("1");
 
@@ -221,6 +225,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'ownerDeposit',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -231,7 +236,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`ownerDeposit 测试完成`);
   }
 
-  async function initiateChallenge(i) {
+  async function initiateChallenge(i, newCompletedBatches) {
     const tokenId = i;
 
     const startTime = Date.now();
@@ -244,6 +249,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'initiateChallenge',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -254,7 +260,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`initiateChallenge 测试完成`);
   }
 
-  async function ownerResToChallenge(i) {
+  async function ownerResToChallenge(i, newCompletedBatches) {
     const tokenId = i;
   
     // 创建 challengeSize 个 uint256 向量
@@ -288,6 +294,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'ownerResToChallenge',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -298,7 +305,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`ownerResToChallenge 测试完成`);
   }
 
-  async function buyerVerifyChallenge(i) {
+  async function buyerVerifyChallenge(i, newCompletedBatches) {
     const tokenId = i;
 
     const startTime = Date.now();
@@ -311,6 +318,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'buyerVerifyChallenge',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -321,7 +329,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`buyerVerifyChallenge 测试完成`);
   }
 
-  async function otherOwnersResToChallenge(i) {
+  async function otherOwnersResToChallenge(i, newCompletedBatches) {
     const tokenId = i;
     const challengerTokenId = 1;
 
@@ -364,6 +372,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'otherOwnersResToChallenge',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -374,7 +383,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`otherOwnersResToChallenge 测试完成`);
   }
 
-  async function buyerConfirmChallengeEnd(i) {
+  async function buyerConfirmChallengeEnd(i, newCompletedBatches) {
     const tokenId = i;
 
     // 模拟时间经过
@@ -391,6 +400,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'buyerConfirmChallengeEnd',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -401,11 +411,9 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
     console.log(`buyerConfirmChallengeEnd 测试完成`);
   }
 
-  async function setHashchainTip(i) {
-    const tokenId = i;
-
+  async function setHashchainTip(tokenId, newCompletedBatches) {
     // 模拟哈希链
-    let finalHash = ethers.keccak256(ethers.toUtf8Bytes(`finalHash${i}`));
+    let finalHash = ethers.keccak256(ethers.toUtf8Bytes(`finalHash${tokenId}`));
     let tip = finalHash;
     for (let i = 0; i < newCompletedBatches; i++) {
       tip = ethers.keccak256(tip);
@@ -421,6 +429,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'setHashchainTip',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -428,12 +437,11 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
       receipt: receiptJson
     });
 
-    console.log(`setHashchainTip 测试完成`);
+    console.log(`setHashchainTip 测试完成，newCompletedBatches: ${newCompletedBatches}`);
   }
 
-  async function confirmFinalPayment(i) {
-    const tokenId = i;
-    const finalHash = ethers.keccak256(ethers.toUtf8Bytes(`finalHash${i}`));
+  async function confirmFinalPayment(tokenId, newCompletedBatches) {
+    const finalHash = ethers.keccak256(ethers.toUtf8Bytes(`finalHash${tokenId}`));
 
     const startTime = Date.now();
     const tx = await nmft.connect(owner).confirmFinalPayment(tokenId, buyer.address, finalHash, newCompletedBatches);
@@ -445,6 +453,7 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
 
     appendToCSV({
       method: 'confirmFinalPayment',
+      batchNumber: newCompletedBatches,
       latency: executionTime,
       gas: parseInt(receipt.gasUsed.toString(), 10),
       contractAddress: contractAddress,
@@ -452,6 +461,6 @@ describe(`NMFT Contract on ${network} - Gas and Time Analysis`, function() {
       receipt: receiptJson
     });
 
-    console.log(`confirmFinalPayment 测试完成`);
+    console.log(`confirmFinalPayment 测试完成，newCompletedBatches: ${newCompletedBatches}`);
   }
 });
