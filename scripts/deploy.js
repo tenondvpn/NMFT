@@ -1,4 +1,6 @@
 const hre = require("hardhat");
+const fs = require('fs');
+const path = require('path');
 
 async function main() {
   const [deployer] = await hre.ethers.getSigners();
@@ -7,31 +9,75 @@ async function main() {
 
   const NMFT = await hre.ethers.getContractFactory("NMFT");
 
-  const nmft = await NMFT.deploy(deployer.address, process.env.PROJECTION_MATRIX_HASH);
+  const projectionMatrixHash = process.env.PROJECTION_MATRIX_HASH;
+  if (!projectionMatrixHash) {
+    throw new Error("PROJECTION_MATRIX_HASH not set in .env file");
+  }
 
+  const startTime = Date.now();
+  const nmft = await NMFT.deploy(deployer.address, projectionMatrixHash);
   const deploymentReceipt = await nmft.deploymentTransaction().wait();
+  const endTime = Date.now();
 
-  console.log("NMFT deployed to:", await nmft.getAddress());
-
-  // 获取 gas 使用量
+  const executionTime = endTime - startTime;
+  const contractAddress = await nmft.getAddress();
   const gasUsed = deploymentReceipt.gasUsed;
+
+  console.log("NMFT deployed to:", contractAddress);
   console.log("Gas used:", gasUsed.toString());
 
-  // 获取 gas 价格
-  const gasPrice = deploymentReceipt.gasPrice;
-  console.log("Gas price:", hre.ethers.formatUnits(gasPrice, "gwei"), "gwei");
+  // 获取当前网络
+  const network = hre.network.name;
 
-  // 计算总 gas 费用（以 ETH 为单位）
-  const gasCost = gasUsed * gasPrice;
-  console.log("Total gas cost:", hre.ethers.formatEther(gasCost), "ETH");
+  // 更新 .env 文件
+  updateEnvFile(network, contractAddress);
 
-  // 假设的 ETH 价格
-  const ethPrice = 2000; // 假设 1 ETH = 2000 USD
-  console.log("Assumed ETH price:", ethPrice, "USD");
+  // 更新 CSV 文件
+  updateCsvFile(network, executionTime, gasUsed, contractAddress, deploymentReceipt);
+}
 
-  // 计算并打印估计的 USD 费用
-  const gasCostUSD = hre.ethers.formatEther(gasCost) * ethPrice;
-  console.log("Estimated total gas cost:", gasCostUSD.toFixed(2), "USD");
+function updateEnvFile(network, address) {
+  const envPath = path.join(__dirname, '../.env');
+  let envContent = '';
+
+  if (fs.existsSync(envPath)) {
+    envContent = fs.readFileSync(envPath, 'utf8');
+  }
+
+  const envLines = envContent.split('\n');
+  const variableName = `${network.toUpperCase()}_NMFT_CONTRACT_ADDRESS`;
+  
+  let updated = false;
+  for (let i = 0; i < envLines.length; i++) {
+    if (envLines[i].startsWith(`${variableName}=`)) {
+      envLines[i] = `${variableName}=${address}`;
+      updated = true;
+      break;
+    }
+  }
+
+  if (!updated) {
+    envLines.push(`${variableName}=${address}`);
+  }
+
+  fs.writeFileSync(envPath, envLines.join('\n'));
+  console.log(`.env file updated with ${variableName}=${address}`);
+}
+
+function updateCsvFile(network, executionTime, gasUsed, contractAddress, deploymentReceipt) {
+  const csvFilePath = path.join(__dirname, `../results/${network}_performance.csv`);
+  
+  // 将整个 deploymentReceipt 转换为 JSON 字符串，并转义逗号和换行符
+  const receiptJson = JSON.stringify(deploymentReceipt).replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  
+  const csvLine = `deploy,${executionTime},${gasUsed},${contractAddress},${new Date().toISOString()},${receiptJson}\n`;
+
+  if (!fs.existsSync(csvFilePath)) {
+    fs.writeFileSync(csvFilePath, 'method,latency,gas,contract_address,time,receipt\n');
+  }
+
+  fs.appendFileSync(csvFilePath, csvLine);
+  console.log(`CSV file updated: ${csvFilePath}`);
 }
 
 main()
