@@ -148,6 +148,11 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         PROJECTION_MATRIX_HASH = projectionMatrixHash;
     }
 
+    // 获取当前NFT的总供应量
+    function totalSupply() public view returns (uint256) {
+        return _tokenIds.current();
+    }
+
     // 计算投影矩阵的哈希值（用于验证）
     function calculateProjectionMatrixHash() public pure returns (bytes32) {
         bytes memory matrixData = new bytes(COMPRESSED_VECTOR_LENGTH * VECTOR_LENGTH);
