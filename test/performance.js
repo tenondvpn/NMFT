@@ -15,7 +15,7 @@ const reqBatchPrice = ethers.parseEther("0.1");
 const tradeType = 1; // 1 代表 TradeType.DataAndNFT
 const nftTransferFee = ethers.parseEther("1");
 const ownerDepositAmount = ethers.parseEther("1");
-const tradeNumber = parseInt(process.env.TRADE_NUMBER || "1", 10);
+const tradeNumber = 10;
 let contractAddress;
 let globalVectors = [];
 let globalMerkleRoot = '';

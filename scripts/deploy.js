@@ -33,7 +33,7 @@ async function main() {
   updateEnvFile(network, contractAddress);
 
   // 更新 CSV 文件
-  updateCsvFile(network, executionTime, gasUsed, contractAddress, deploymentReceipt);
+  updateCsvFiles(network, executionTime, gasUsed, contractAddress, deploymentReceipt);
 }
 
 function updateEnvFile(network, address) {
@@ -64,20 +64,40 @@ function updateEnvFile(network, address) {
   console.log(`.env file updated with ${variableName}=${address}`);
 }
 
-function updateCsvFile(network, executionTime, gasUsed, contractAddress, deploymentReceipt) {
-  const csvFilePath = path.join(__dirname, `../results/${network}_performance.csv`);
-  
-  // 将整个 deploymentReceipt 转换为 JSON 字符串，并转义逗号和换行符
-  const receiptJson = JSON.stringify(deploymentReceipt).replace(/,/g, '\\,').replace(/\n/g, '\\n');
-  
-  const csvLine = `deploy,${executionTime},${gasUsed},${contractAddress},${new Date().toISOString()},${receiptJson}\n`;
+function updateCsvFiles(network, executionTime, gasUsed, contractAddress, deploymentReceipt) {
+  const files = [
+    `${network}_performance.csv`,
+    `${network}_batch_number.csv`,
+    `${network}_challenge_size.csv`
+  ];
 
-  if (!fs.existsSync(csvFilePath)) {
-    fs.writeFileSync(csvFilePath, 'method,latency,gas,contract_address,time,receipt\n');
-  }
+  files.forEach(file => {
+    const csvFilePath = path.join(__dirname, `../results/${file}`);
+    
+    // 将整个 deploymentReceipt 转换为 JSON 字符串，并转义逗号和换行符
+    const receiptJson = JSON.stringify(deploymentReceipt).replace(/,/g, '\\,').replace(/\n/g, '\\n');
+    
+    let csvLine;
+    if (file.includes('performance')) {
+      csvLine = `deploy,${executionTime},${gasUsed},${contractAddress},${new Date().toISOString()},${receiptJson}\n`;
+    } else {
+      // 对于 batch_number 和 challenge_size，我们使用不同的字段顺序
+      csvLine = `deploy,,${executionTime},${gasUsed},${contractAddress},${new Date().toISOString()},${receiptJson}\n`;
+    }
 
-  fs.appendFileSync(csvFilePath, csvLine);
-  console.log(`CSV file updated: ${csvFilePath}`);
+    if (!fs.existsSync(csvFilePath)) {
+      if (file.includes('performance')) {
+        fs.writeFileSync(csvFilePath, 'method,latency,gas,contract_address,time,receipt\n');
+      } else if (file.includes('batch_number')) {
+        fs.writeFileSync(csvFilePath, 'method,batchNumber,latency,gas,contractAddress,time,receipt\n');
+      } else if (file.includes('challenge_size')) {
+        fs.writeFileSync(csvFilePath, 'method,challengeSize,latency,gas,contractAddress,time,receipt\n');
+      }
+    }
+
+    fs.appendFileSync(csvFilePath, csvLine);
+    console.log(`CSV file updated: ${csvFilePath}`);
+  });
 }
 
 main()

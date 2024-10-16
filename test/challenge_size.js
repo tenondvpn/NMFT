@@ -19,9 +19,9 @@ let globalVectors = [];
 let globalMerkleRoot = '';
 
 // 创建测试参数数组
-const testParams = Array.from({ length: 100 }, (_, index) => ({
+const testParams = Array.from({ length: 10 }, (_, index) => ({
   tokenIdOffset: index + 1,
-  challengeSize: index + 1
+  challengeSize: (index + 1) * 10
 }));
 
 function appendToCSV(data) {
@@ -70,6 +70,18 @@ describe(`NMFT Contract on ${network} - Challenge Size Scalability Analysis`, fu
     console.log("NFT总供应量:", Number(totalSupply));
     startTokenId = Number(totalSupply);
     console.log(`从 tokenId = ${startTokenId + 1} 开始`);
+
+    // 设置大额余额
+    const largeBalance = ethers.parseEther("1000000"); // 1,000,000 ETH
+    await ethers.provider.send("hardhat_setBalance", [
+      owner.address,
+      ethers.toBeHex(largeBalance) // 转换为十六进制
+    ]);
+    console.log(`已为账户 ${owner.address} 设置 1,000,000 ETH 的余额`);
+
+    // 检查余额
+    const balance = await ethers.provider.getBalance(owner.address);
+    console.log(`账户 ${owner.address} 的当前余额: ${ethers.formatEther(balance)} ETH`);
   });
 
   it("should test all functions with different challengeSize values", async function() {

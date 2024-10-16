@@ -4,17 +4,23 @@
 show_usage() {
     echo "Usage: $0 [localhost|sepolia]"
     echo "If no network is specified, it will prompt for input."
+    echo "At any prompt, enter 'q' to quit."
 }
 
 # 函数：选择网络
 select_network() {
     if [ -z "$1" ]; then
-        echo "Select the network to deploy to:"
-        select network in "localhost" "sepolia"; do
-            case $network in
-                localhost|sepolia ) break;;
-                * ) echo "Invalid selection. Please choose 1 for localhost or 2 for sepolia.";;
-            esac
+        echo "Select the network to deploy to (or enter 'q' to quit):"
+        options=("localhost" "sepolia")
+        select network in "${options[@]}"; do
+            if [[ "$REPLY" == "q" ]]; then
+                echo "Exiting..."
+                exit 0
+            elif [[ -n "$network" ]]; then
+                break
+            else
+                echo "Invalid selection. Please choose a valid option or enter 'q' to quit."
+            fi
         done
     else
         network=$1
@@ -22,6 +28,7 @@ select_network() {
 
     case $network in
         localhost|sepolia ) ;;
+        q ) echo "Exiting..."; exit 0;;
         * ) echo "Invalid network. Use 'localhost' or 'sepolia'."; exit 1;;
     esac
 
