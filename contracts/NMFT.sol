@@ -30,7 +30,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     Counters.Counter private _tokenIds;
     address public admin;
     uint256 public similarityThreshold = 95;
-    uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
+    // uint256 public constant CHALLENGE_RESPONSE_WINDOW = 24 hours;
     uint256 public constant TRANSACTION_TIMEOUT = 24 hours;
     uint256 public constant COMPRESSED_VECTOR_LENGTH = 256;
     uint256 public constant VECTOR_LENGTH = 10;
@@ -529,10 +529,10 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         ));
         require(providedCombinedHash == challenge.combinedHash, "Combined hash mismatch");
 
-        if (block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW) {
-            _resolveChallenge(tokenId, buyer);
-            return;
-        }
+        // if (block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW) {
+        //     _resolveChallenge(tokenId, buyer);
+        //     return;
+        // }
 
         require(
             originalVectors.length == challenge.vectorCount &&
@@ -559,6 +559,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         }
 
         _requests[tokenId][buyer].lastActivityTimestamp = block.timestamp;
+        _resolveChallenge(tokenId, buyer);
         emit ChallengeResponseReceived(tokenId, msg.sender, challengerTokenId, challenge.currentWinner);
     }
 
@@ -611,16 +612,16 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     }
 
     // 买家确认挑战结束
-    function buyerConfirmChallengeEnd(uint256 tokenId) 
-        external 
-        challengeInitiated(tokenId, msg.sender)
-    {
-        Challenge storage challenge = _challenges[tokenId][msg.sender];
-        require(challenge.initiatedTimestamp != 0, "Challenge does not exist");
-        require(!challenge.resolved, "Challenge already resolved");
-        require(block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW, "Challenge response window not closed yet");
-        _resolveChallenge(tokenId, msg.sender);
-    }
+    // function buyerConfirmChallengeEnd(uint256 tokenId) 
+    //     external 
+    //     challengeInitiated(tokenId, msg.sender)
+    // {
+    //     Challenge storage challenge = _challenges[tokenId][msg.sender];
+    //     require(challenge.initiatedTimestamp != 0, "Challenge does not exist");
+    //     require(!challenge.resolved, "Challenge already resolved");
+    //     require(block.timestamp >= challenge.initiatedTimestamp + CHALLENGE_RESPONSE_WINDOW, "Challenge response window not closed yet");
+    //     _resolveChallenge(tokenId, msg.sender);
+    // }
 
     // 内部函数：解决挑战
     function _resolveChallenge(uint256 tokenId, address buyer) internal nonReentrant {
