@@ -24,3 +24,4 @@ gas.js
 __pycache__
 *.ipynb
 .env
+latex
