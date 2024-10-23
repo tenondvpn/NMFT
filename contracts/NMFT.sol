@@ -57,6 +57,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         uint256 challengeSize;   // 挑战大小
         uint256 nftTransferFee;  // NFT转移费用
         uint256 ownerDepositAmount; // 所有者质押金额
+        uint256 buyerDepositAmount; // 购买者质押金额
         bool confirmed;          // 确认状态
         bool buyerDeposited;     // 购买者质押状态
         bool ownerDeposited;     // 拥有者质押状态
@@ -138,6 +139,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
     event TransactionCleanedUp(uint256 indexed tokenId, address indexed buyer, address indexed cleaner);
     // 事件：记录完整的向量和 Merkle 根
     event ChallengeVectorsRecorded(uint256 indexed tokenId, address indexed buyer, uint256[] vectors, bytes32[] merkleRoots);
+    // 事件：提取押金
+    event DepositsWithdrawn(uint256 indexed tokenId, address indexed withdrawer, uint256 amount);
 
     // 构造函数
     constructor(
@@ -318,6 +321,10 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         
         DataInfo storage dataInfo = _dataInfo[tokenId];
         require(reqBatchNumber <= dataInfo.batchNumber, "Requested batch number exceeds available batches");
+
+        uint256 buyerDepositAmount = tradeType == TradeType.DataOnly 
+            ? reqBatchPrice * reqBatchNumber
+            : reqBatchPrice * reqBatchNumber + nftTransferFee;
         
         Request storage newRequest = _requests[tokenId][msg.sender];
         newRequest.reqBatchPrice = reqBatchPrice;
@@ -326,6 +333,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         newRequest.challengeSize = challengeSize;
         newRequest.nftTransferFee = nftTransferFee;
         newRequest.ownerDepositAmount = ownerDepositAmount;
+        newRequest.buyerDepositAmount = buyerDepositAmount;
         newRequest.lastActivityTimestamp = block.timestamp;
 
         // 创建一个可读的字符串表示
@@ -370,11 +378,7 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         buyerNotDeposited(tokenId, msg.sender)
     {
         Request storage request = _requests[tokenId][msg.sender];
-        uint256 depositAmount = request.tradeType == TradeType.DataOnly 
-            ? request.reqBatchPrice * request.reqBatchNumber
-            : request.reqBatchPrice * request.reqBatchNumber + request.nftTransferFee;
-
-        require(msg.value == depositAmount, "Incorrect buyer deposit amount");
+        require(msg.value == request.buyerDepositAmount, "Incorrect buyer deposit amount");
 
         request.buyerDeposited = true;
         request.lastActivityTimestamp = block.timestamp;
@@ -641,7 +645,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
             payable(buyer).transfer(buyerDepositAmount + halfOwnerDepositAmount);
             // 挑战成功的所有者得到另一半的所有者押金
             payable(challenge.currentWinner).transfer(halfOwnerDepositAmount);
-
+            // 将所有者押金清零
+            request.ownerDepositAmount = 0;
             // 对获胜者新建一个challenge，且已经resolved，保证获胜者不会被重复挑战
             Challenge storage newChallenge = _challenges[challenge.winnerTokenId][buyer];
             newChallenge.resolved = true;
@@ -726,6 +731,8 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
 
         // 将资金转移给挑战胜利者
         payable(msg.sender).transfer(paymentAmount);
+        // 买家剩余的质押金额
+        request.buyerDepositAmount -= paymentAmount;
 
         request.lastActivityTimestamp = block.timestamp;
         emit FinalPaymentConfirmed(tokenId, buyer, msg.sender, totalCompletedBatches);
@@ -749,6 +756,43 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         delete _challenges[tokenId][buyer];
         delete _hashchainInfo[tokenId][buyer];
         emit TransactionCleanedUp(tokenId, buyer, msg.sender);
+    }
+
+    // 允许买家和所有者提取未使用的质押资金
+    function withdrawDeposits(uint256 tokenId, address buyer) external nonReentrant {
+        // 获取请求
+        Request storage request = _requests[tokenId][buyer];
+
+        // 检查请求是否存在
+        require(request.reqBatchPrice > 0, "No valid request found");
+
+        // 检查是否超过交易超时时间
+        require(request.lastActivityTimestamp + TRANSACTION_TIMEOUT < block.timestamp, "Transaction has not timed out yet");
+
+        uint256 amountToWithdraw = 0;
+
+        // 检查msg.sender是否为买家
+        if (msg.sender == buyer) {
+            require(request.buyerDepositAmount > 0, "Insufficient buyer deposit");
+            // 计算买家可退还的金额
+            amountToWithdraw += request.buyerDepositAmount; // 退还买家的实际质押金额
+        } 
+        // 检查msg.sender是否为所有者
+        else if (msg.sender == ownerOf(tokenId)) {
+            require(request.ownerDepositAmount > 0, "Insufficient owner deposit");
+            // 计算所有者可退还的金额
+            amountToWithdraw += request.ownerDepositAmount; // 退还所有者的质押金额
+        } else {
+            revert("Caller is neither buyer nor owner");
+        }
+
+        // 确保合约中有足够的资金来进行转账
+        require(address(this).balance >= amountToWithdraw, "Insufficient contract balance for withdrawal");
+
+        // 转账给用户
+        payable(msg.sender).transfer(amountToWithdraw);
+        
+        emit DepositsWithdrawn(tokenId, msg.sender, amountToWithdraw);
     }
 
     // 检查token是否存在
