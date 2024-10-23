@@ -732,7 +732,9 @@ contract NMFT is ERC721URIStorage, Ownable, ReentrancyGuard {
         // 将资金转移给挑战胜利者
         payable(msg.sender).transfer(paymentAmount);
         // 买家剩余的质押金额
-        request.buyerDepositAmount -= paymentAmount;
+        unchecked {
+            request.buyerDepositAmount -= paymentAmount;
+        }
 
         request.lastActivityTimestamp = block.timestamp;
         emit FinalPaymentConfirmed(tokenId, buyer, msg.sender, totalCompletedBatches);
