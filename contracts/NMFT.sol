@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 /**
  * @title NMFT: A Copyright-Preserving Data Trading Protocol
  * @dev This smart contract is associated with the research paper:
- * "NMFT: A Copyright-Preserving Data Trading Protocol based on NFT and AI-powered Merkle Feature Tree"
+ * "NMFT: A Copyrighted Data Trading Protocol based on NFT and AI-powered Merkle Feature Tree"
  * 
  * The contract implements a novel approach to data trading that preserves copyright
  * and enables secure, verifiable transactions using NFTs and Merkle Feature Trees.
