@@ -46,7 +46,7 @@ function updateEnvFile(network, address) {
 
   const envLines = envContent.split('\n');
   const variableName = `${network.toUpperCase()}_NMFT_CONTRACT_ADDRESS`;
-  
+
   let updated = false;
   for (let i = 0; i < envLines.length; i++) {
     if (envLines[i].startsWith(`${variableName}=`)) {
@@ -65,6 +65,12 @@ function updateEnvFile(network, address) {
 }
 
 function updateCsvFiles(network, executionTime, gasUsed, contractAddress, deploymentReceipt) {
+  // 确保 results 目录存在
+  const resultsDir = path.join(__dirname, '../results');
+  if (!fs.existsSync(resultsDir)) {
+    fs.mkdirSync(resultsDir, { recursive: true });
+  }
+
   const files = [
     `${network}_performance.csv`,
     `${network}_batch_number.csv`,
@@ -72,11 +78,11 @@ function updateCsvFiles(network, executionTime, gasUsed, contractAddress, deploy
   ];
 
   files.forEach(file => {
-    const csvFilePath = path.join(__dirname, `../results/${file}`);
-    
+    const csvFilePath = path.join(resultsDir, file);
+
     // 将整个 deploymentReceipt 转换为 JSON 字符串，并转义逗号和换行符
     const receiptJson = JSON.stringify(deploymentReceipt).replace(/,/g, '\\,').replace(/\n/g, '\\n');
-    
+
     let csvLine;
     if (file.includes('performance')) {
       csvLine = `deploy,${executionTime},${gasUsed},${contractAddress},${new Date().toISOString()},${receiptJson}\n`;
