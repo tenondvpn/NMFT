@@ -20,4 +20,3 @@ ignition/deployments/chain-31337
 *.csv
 *.png
 __pycache__
-*.ipynb
