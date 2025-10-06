@@ -19,3 +19,6 @@ ignition/deployments/chain-31337
 *.txt
 *.png
 __pycache__
+
+data
+.ipynb_checkpoints
