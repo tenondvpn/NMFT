@@ -1,0 +1,312 @@
+{
+    "ultra_high_similarity": [
+        {
+            "group": "error_messages",
+            "texts": [
+                "Error: Unable to connect to database. Please check your connection settings and try again.",
+                "Error: Database connection failed. Please verify your connection settings and retry.",
+                "Error: Cannot establish database connection. Please check your settings and attempt again.",
+                "Error: Failed to connect to database. Please validate your connection settings and try again.",
+                "Error: Database connection unsuccessful. Please review your connection settings and try again.",
+                "Error: Connection to database unsuccessful. Please verify your settings and attempt reconnection.",
+                "Error: Database connection error occurred. Please check connection parameters and try again.",
+                "Error: Unable to establish database connection. Please verify settings and attempt again.",
+                "Error: Database connection attempt failed. Please check your configuration and retry.",
+                "Error: Connection to database failed to establish. Please validate settings and try again."
+            ]
+        },
+        {
+            "group": "api_documentation",
+            "texts": [
+                "This API endpoint accepts a JSON payload with user_id and timestamp parameters in the request body.",
+                "The API endpoint requires a JSON payload containing user_id and timestamp parameters in the request body.",
+                "This endpoint expects a JSON payload that includes user_id and timestamp parameters in the request body.",
+                "The endpoint accepts a JSON payload which must contain user_id and timestamp parameters in the request body.",
+                "For this API endpoint, provide a JSON payload containing user_id and timestamp parameters in the request body.",
+                "The endpoint requires a JSON request body with user_id and timestamp parameters.",
+                "Submit requests to this API endpoint with a JSON payload including user_id and timestamp in the body.",
+                "When calling this API endpoint, include a JSON payload with user_id and timestamp in the request body.",
+                "This API endpoint processes requests with JSON payloads containing user_id and timestamp parameters.",
+                "Requests to this endpoint must include a JSON body with user_id and timestamp parameters."
+            ]
+        },
+        {
+            "group": "function_description",
+            "texts": [
+                "The function processes input data and returns a normalized vector of floating-point values.",
+                "This function takes input data and outputs a normalized vector of floating-point values.",
+                "The function accepts input data and produces a normalized vector of floating-point values.",
+                "This function handles input data and generates a normalized vector of floating-point values.",
+                "The function transforms input data into a normalized vector of floating-point values.",
+                "This function converts input data to produce a normalized vector of floating-point values.",
+                "The function processes input data to create a normalized vector of floating-point values.",
+                "This function takes input data and creates a normalized vector of floating-point values.",
+                "The function normalizes input data to generate a vector of floating-point values.",
+                "This function processes input data to output a normalized vector of floating-point values."
+            ]
+        },
+        {
+            "group": "warning_messages",
+            "texts": [
+                "Warning: System memory usage has exceeded 90% of available capacity.",
+                "Warning: System memory utilization has surpassed 90% of available capacity.",
+                "Warning: Memory usage on system has exceeded 90% of available capacity.",
+                "Warning: Available system memory has dropped below 10% of total capacity.",
+                "Warning: System memory consumption has reached 90% of available capacity.",
+                "Warning: Memory utilization on system has reached 90% of total capacity.",
+                "Warning: System memory levels have exceeded 90% of maximum capacity.",
+                "Warning: Available memory on system has fallen to 10% of total capacity.",
+                "Warning: System memory resources are at 90% of maximum capacity.",
+                "Warning: Memory usage has reached critical levels at 90% of system capacity."
+            ]
+        }
+    ],
+    "high_similarity": [
+        {
+            "group": "tech_docs",
+            "texts": [
+                "Python is a popular programming language for data science and machine learning.",
+                "Python is a widely-used programming language in data science and ML.",
+                "Python serves as a leading programming language for data science and machine learning tasks.",
+                "Python programming is extensively used in data science and machine learning applications.",
+                "Python has become the go-to programming language for data science and machine learning.",
+                "Python is the preferred programming language in data science and machine learning fields.",
+                "Python stands out as a key programming language for data science and ML projects.",
+                "Python remains the dominant programming language in data science and machine learning.",
+                "Python has emerged as the primary programming language for data science and ML work.",
+                "Python is established as the main programming language for data science and machine learning."
+            ]
+        },
+        {
+            "group": "api_docs",
+            "texts": [
+                "The function takes two parameters: input_data and model_config.",
+                "This function accepts two parameters: input_data and model_config.",
+                "The function requires two parameters - input_data and model_config.",
+                "Two parameters are needed for this function: input_data and model_config.",
+                "The function expects two parameters: input_data and model_config.",
+                "This function needs two parameters: input_data and model_config.",
+                "The function is called with two parameters: input_data and model_config.",
+                "Two arguments are required for this function: input_data and model_config.",
+                "The function definition includes two parameters: input_data and model_config.",
+                "This function operates with two parameters: input_data and model_config."
+            ]
+        },
+        {
+            "group": "product_desc",
+            "texts": [
+                "This smartphone features a 6.7-inch OLED display and A15 processor.",
+                "The smartphone comes with a 6.7-inch OLED screen and A15 chip.",
+                "Featuring a 6.7-inch OLED display, this phone uses an A15 processor.",
+                "The device sports a 6.7-inch OLED panel powered by an A15 processor.",
+                "This phone boasts a 6.7-inch OLED display alongside an A15 processor.",
+                "The smartphone features an A15 chip and 6.7-inch OLED screen.",
+                "Equipped with a 6.7-inch OLED display and A15 processor chip.",
+                "This model includes a 6.7-inch OLED screen with an A15 processor.",
+                "The phone combines a 6.7-inch OLED display with an A15 chip.",
+                "Built with a 6.7-inch OLED screen and powered by an A15 processor."
+            ]
+        },
+        {
+            "group": "legal_text",
+            "texts": [
+                "The parties hereby agree to the terms and conditions set forth below.",
+                "The parties mutually agree to the terms and conditions specified herein.",
+                "Both parties agree to the terms and conditions outlined in this document.",
+                "The parties agree to the terms and conditions stated hereunder.",
+                "The parties consent to the terms and conditions detailed below.",
+                "Both parties accept the terms and conditions contained herein.",
+                "The parties hereby accept the terms and conditions as specified.",
+                "The parties mutually consent to the following terms and conditions.",
+                "Both parties agree to abide by the terms and conditions stated herein.",
+                "The parties acknowledge and agree to these terms and conditions."
+            ]
+        }
+    ],
+    "medium_high_similarity": [
+        {
+            "group": "tech_explanation",
+            "texts": [
+                "Deep learning models require significant computational resources for training.",
+                "Training neural networks demands substantial computing power and GPU resources.",
+                "Machine learning models need considerable processing power during the training phase.",
+                "AI model training consumes extensive computational resources and processing time.",
+                "Training deep learning systems requires substantial computing infrastructure.",
+                "Neural network training demands significant computational capacity.",
+                "Machine learning model training needs powerful computing resources.",
+                "AI systems require extensive processing power for training operations.",
+                "Deep learning training processes demand robust computational capabilities.",
+                "Training AI models necessitates significant computing resources."
+            ]
+        },
+        {
+            "group": "research_findings",
+            "texts": [
+                "The study shows a strong correlation between exercise and mental health.",
+                "Research indicates significant links between physical activity and psychological wellbeing.",
+                "The research demonstrates clear connections between regular exercise and mental wellness.",
+                "Studies reveal important relationships between physical exercise and mental state.",
+                "The findings suggest strong ties between exercise and psychological health.",
+                "Research shows clear benefits of physical activity for mental wellbeing.",
+                "The study identifies positive connections between exercise and mental fitness.",
+                "Evidence indicates strong links between physical activity and mental health.",
+                "Research confirms the relationship between exercise and psychological wellness.",
+                "The findings demonstrate how exercise influences mental wellbeing."
+            ]
+        },
+        {
+            "group": "software_features",
+            "texts": [
+                "The application supports real-time data processing and visualization.",
+                "This software enables live data analysis and graphical representation.",
+                "The program offers immediate data handling and visual output generation.",
+                "Our tool provides dynamic data processing and display capabilities.",
+                "The software features real-time analysis and data visualization tools.",
+                "This application delivers instant data processing and visual analytics.",
+                "The platform supports live data handling and graphical outputs.",
+                "Our software enables dynamic data analysis and visualization features.",
+                "The tool offers real-time processing and visual data representation.",
+                "This program provides immediate data analysis and visualization."
+            ]
+        },
+        {
+            "group": "market_analysis",
+            "texts": [
+                "Recent market trends indicate growing demand for renewable energy solutions.",
+                "Current market analysis shows increasing interest in sustainable power options.",
+                "Market data suggests rising popularity of clean energy alternatives.",
+                "Industry trends point toward higher adoption of green energy solutions.",
+                "Market research reveals growing preference for renewable energy systems.",
+                "Analysis shows increasing market demand for sustainable energy options.",
+                "Current trends indicate rising interest in clean power solutions.",
+                "Market indicators suggest growing adoption of renewable energy technologies.",
+                "Industry analysis shows expanding demand for sustainable power systems.",
+                "Research reveals increasing market focus on renewable energy options."
+            ]
+        }
+    ],
+    "medium_similarity": [
+        {
+            "group": "finance_reports",
+            "texts": [
+                "The company reported strong financial growth in the first quarter.",
+                "The firm's Q1 financial performance exceeded expectations.",
+                "Company revenues showed positive trends in early 2024.",
+                "First quarter earnings were above market estimates.",
+                "The organization's Q1 results demonstrated robust growth.",
+                "Financial performance in Q1 showed significant improvement.",
+                "The company's first quarter results were notably strong.",
+                "Q1 financial indicators revealed positive business growth.",
+                "The firm reported impressive first quarter performance.",
+                "Early 2024 financial results exceeded projections."
+            ]
+        },
+        {
+            "group": "tech_requirements",
+            "texts": [
+                "Machine learning models require significant computational resources.",
+                "AI systems need substantial computing power to operate effectively.",
+                "Computational requirements for ML models are considerable.",
+                "Processing power is essential for machine learning applications.",
+                "ML systems demand robust computational capabilities.",
+                "AI models require extensive processing resources.",
+                "Computing power is crucial for machine learning operations.",
+                "ML applications need significant processing capacity.",
+                "Substantial computational resources are needed for AI systems.",
+                "Machine learning requires powerful computing infrastructure."
+            ]
+        },
+        {
+            "group": "climate_research",
+            "texts": [
+                "The research paper discusses climate change impacts.",
+                "This study examines environmental changes due to global warming.",
+                "The paper analyzes effects of rising global temperatures.",
+                "Research findings show climate-related environmental changes.",
+                "The study investigates global warming consequences.",
+                "This research explores climate change effects.",
+                "The paper examines environmental impact of climate change.",
+                "Research documents global warming's environmental effects.",
+                "The study assesses climate-induced changes.",
+                "This paper analyzes global climate impacts."
+            ]
+        },
+        {
+            "group": "electric_vehicles",
+            "texts": [
+                "Electric vehicles are becoming increasingly popular in urban areas.",
+                "More city dwellers are adopting electric cars for transportation.",
+                "Urban transportation is shifting towards electric vehicles.",
+                "Electric cars are gaining popularity in metropolitan regions.",
+                "Cities see growing adoption of electric vehicles.",
+                "Urban residents are choosing electric cars more frequently.",
+                "Electric vehicle use is rising in city environments.",
+                "Metropolitan areas show increased electric car adoption.",
+                "Cities report growing electric vehicle preferences.",
+                "Urban transport increasingly features electric vehicles."
+            ]
+        }
+    ],
+    "low_similarity": [
+        {
+            "group": "tech_vs_cooking",
+            "texts": [
+                "Neural networks utilize backpropagation for gradient descent optimization.",
+                "Knead the dough for 10 minutes until it becomes smooth and elastic.",
+                "Deep learning models process hierarchical feature representations.",
+                "Marinate the chicken in herbs and spices overnight for best results.",
+                "Convolutional networks excel at image recognition tasks.",
+                "Simmer the sauce on low heat until it reduces by half.",
+                "Transformer architectures revolutionized natural language processing.",
+                "Bake the bread at 350 degrees for 45 minutes until golden brown.",
+                "Reinforcement learning algorithms optimize through trial and error.",
+                "Season the vegetables with olive oil, salt, and fresh herbs."
+            ]
+        },
+        {
+            "group": "physics_vs_gardening",
+            "texts": [
+                "Quantum entanglement demonstrates non-local correlation between particles.",
+                "Prune rose bushes in early spring to promote healthy blooming.",
+                "String theory suggests multiple dimensions beyond our observable universe.",
+                "Composting organic waste enriches soil with essential nutrients.",
+                "Particle accelerators reveal fundamental properties of matter.",
+                "Water perennials deeply to encourage strong root growth.",
+                "Dark matter influences galactic rotation and cosmic structure.",
+                "Mulch garden beds to retain moisture and suppress weeds.",
+                "Quantum tunneling enables nuclear fusion in stars.",
+                "Plant bulbs in autumn for spring flowering displays."
+            ]
+        },
+        {
+            "group": "programming_vs_history",
+            "texts": [
+                "Python decorators allow you to modify function behavior dynamically.",
+                "The Roman Empire reached its greatest territorial extent under Trajan.",
+                "Object-oriented programming encapsulates data and behavior.",
+                "Ancient Egyptian pyramids were built as tombs for pharaohs.",
+                "Recursive functions call themselves to solve complex problems.",
+                "The Renaissance began in 14th-century Florence, Italy.",
+                "Version control systems track changes in source code over time.",
+                "The Industrial Revolution transformed manufacturing processes.",
+                "API endpoints handle specific HTTP request methods.",
+                "Medieval castles served both defensive and administrative purposes."
+            ]
+        },
+        {
+            "group": "ai_vs_music",
+            "texts": [
+                "Transformer models revolutionized natural language processing tasks.",
+                "Mozart composed his first symphony at the age of eight.",
+                "BERT models use bidirectional context for token representation.",
+                "Classical music developed during the European Renaissance period.",
+                "Neural networks learn patterns through weight adjustments.",
+                "Beethoven composed his Ninth Symphony while completely deaf.",
+                "Gradient descent optimizes model parameters iteratively.",
+                "Jazz emerged in New Orleans during the early 20th century.",
+                "Reinforcement learning agents learn through environment interaction.",
+                "Bach wrote over 1000 musical compositions in his lifetime."
+            ]
+        }
+    ]
+}
